@@ -68,7 +68,7 @@ WAIT_FOR_RDY_ST | ESTABLISH_DRP_ADDR_ST | DRP_RDY=1
 
 ## Change log
 
-**1. xx.xx.xxxx : v1.0 - First Version **
+**1. 04.05.2021 : v1.0 - First Version**
 - add description
 
 
