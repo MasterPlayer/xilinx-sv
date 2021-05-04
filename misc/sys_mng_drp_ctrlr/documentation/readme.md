@@ -4,7 +4,7 @@ Component for read RAW data of temperature, voltage from Xilinx UltraScale Syste
 
 ![sys_mng_drp_ctrlr_struct][sys_mng_drp_ctrlr_struct_link]
 
-[sys_mng_drp_ctrlr_struct_link]:https://github.com/MasterPlayer/xilinx-sv/blob/master/misc/sys_mng_drp_ctrlr/documentation/sys_mng_drp_ctrlr_struct.png
+[sys_mng_drp_ctrlr_struct_link]:https://github.com/MasterPlayer/xilinx-sv/blob/main/misc/sys_mng_drp_ctrlr/documentation/sys_mng_drp_ctrlr_struct.png
 
 ## Ports 
 
@@ -51,7 +51,7 @@ DRP_WE | out | 1 | signal for writing to remote register. Currently is 0
 
 ![sys_mng_drp_ctrlr_fsm][sys_mng_drp_ctrlr_fsm_link]
 
-[sys_mng_drp_ctrlr_fsm_link]:https://github.com/MasterPlayer/xilinx-sv/blob/master/misc/sys_mng_drp_ctrlr/documentation/sys_mng_drp_ctrlr_fsm.png
+[sys_mng_drp_ctrlr_fsm_link]:https://github.com/MasterPlayer/xilinx-sv/blob/main/misc/sys_mng_drp_ctrlr/documentation/sys_mng_drp_ctrlr_fsm.png
 
 ### FSM states
 
