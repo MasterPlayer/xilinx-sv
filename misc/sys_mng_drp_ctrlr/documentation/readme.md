@@ -61,7 +61,12 @@ IDLE_ST | ESTABLISH_DRP_ADDR_ST | Absolute
 ESTABLISH_DRP_ADDR_ST | WAIT_FOR_RDY_ST | Absolute
 WAIT_FOR_RDY_ST | ESTABLISH_DRP_ADDR_ST | DRP_RDY=1
 
-## Лог изменений
+## Files
+
+- sysmng_wrapper: for example how sys_mng_drp_ctrlr connects to system monitor core
+
+
+## Change log
 
 **1. xx.xx.xxxx : v1.0 - First Version **
 - add description
