@@ -135,10 +135,11 @@ module axis_iic_ctrlr #(
     end 
 
     always_ff @(posedge clk) begin 
-        if (reset)
+        if (reset) begin 
             cmd_rden <= 1'b0;
-        else
-            if (i2c_clk_assertion)
+        end else begin 
+            if (i2c_clk_assertion) begin 
+
                 case (current_state)
                     STOP_TRANSMISSION_ST:
                         cmd_rden <= 1'b1;
@@ -147,10 +148,10 @@ module axis_iic_ctrlr #(
                         cmd_rden <= 1'b0;
 
                 endcase
-            else
+            end else begin 
                 cmd_rden <= 1'b0;
-
-
+            end 
+        end 
     end 
 
     fifo_in_sync_user_xpm #(
