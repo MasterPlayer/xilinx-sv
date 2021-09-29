@@ -29,6 +29,8 @@ entity axi_memory_writer_func is
 
         VALID_COUNTER       :   out     std_logic_vector ( 31 downto 0 )                    ;
         STATUS              :   out     std_logic                                           ;
+        SUSPEND_ACTIVE      :   out     std_logic                                           ;
+
         -- interrupts vector
         FIFO_NOT_EMPTY      :   out     std_logic                                           ;
         FIFO_WREN           :   out     std_logic                                           ;
@@ -226,6 +228,8 @@ architecture axi_memory_writer_func_arch of axi_memory_writer_func is
 
     signal  queue_volume_reg    :           std_logic_Vector ( 31 downto 0 )    := (others => '0')      ;
 
+    signal  suspend_active_reg  :           std_logic                           := '0';
+
 begin
 
     M_AXI_AWSIZE    <=  conv_std_logic_vector ( C_AXSIZE_INT, M_AXI_AWSIZE'length);
@@ -251,7 +255,7 @@ begin
     FIFO_NOT_EMPTY   <= not(cmd_empty);
     FIFO_WREN        <= cmd_wren;
     
-
+    SUSPEND_ACTIVE   <= suspend_active_reg;
 
     VALID_COUNTER    <= valid_reg;
     STATUS           <= status_reg;
@@ -274,6 +278,19 @@ begin
                 when others => 
                     status_reg <= '1';
             
+            end case;
+        end if;
+    end process;
+
+    suspend_active_reg_processing : process(CLK)
+    begin
+        if CLK'event AND CLK = '1' then 
+            case current_state is 
+                when PAUSE_ST => 
+                    suspend_active_reg <= '1';
+
+                when others =>  
+                    suspend_active_reg <= '0';
             end case;
         end if;
     end process;
@@ -336,28 +353,34 @@ begin
     has_stop_initiated_processing : process(CLK)
     begin
         if CLK'event AND CLK = '1' then 
-            case current_state is 
+            if RESET = '1' then 
+                has_stop_initiated <= '0';
+            else
+                case current_state is 
 
-                when IDLE_ST => 
-                    has_stop_initiated <= '0';
-
-                when PAUSE_ST => 
-                    if RUN_SIGNAL = '1' then 
+                    when IDLE_ST => 
                         has_stop_initiated <= '0';
-                    else
-                        has_stop_initiated <= has_stop_initiated;
-                    end if;
 
-                when others => 
-                    if STOP_SIGNAL = '1' then 
-                        has_stop_initiated <= '1';
-                    else
-                        has_stop_initiated <= has_stop_initiated;
-                    end if;
- 
-            end case;
+                    when PAUSE_ST => 
+                        if RUN_SIGNAL = '1' then 
+                            has_stop_initiated <= '0';
+                        else
+                            has_stop_initiated <= has_stop_initiated;
+                        end if;
+
+                    when others => 
+                        if STOP_SIGNAL = '1' then 
+                            has_stop_initiated <= '1';
+                        else
+                            has_stop_initiated <= has_stop_initiated;
+                        end if;
+     
+                end case;
+            end if;
         end if;
     end process;
+
+
 
     word_counter_processing : process(CLK)
     begin
@@ -396,6 +419,8 @@ begin
         end if;
     end process;
 
+
+
     m_axi_awaddr_reg_processing : process(CLK)
     begin
         if CLK'event AND CLK = '1' then 
@@ -424,6 +449,8 @@ begin
         end if;
     end process;
 
+
+
     current_address_processing : process(CLK)
     begin
         if CLK'event AND CLK = '1' then 
@@ -445,10 +472,13 @@ begin
         end if;
     end process;
 
+
+
     m_axi_awlen_reg_processing : process(CLK)
     begin
         if CLK'event AND CLK = '1' then
             case current_state is
+
                 when WAIT_FOR_DATA_ST => 
                     if word_counter <= conv_std_logic_vector(BURST_LIMIT, word_counter'length) then 
                         m_axi_awlen_reg <= word_counter(7 downto 0) - 1;
@@ -481,6 +511,8 @@ begin
             end case;
         end if;
     end process;
+
+
 
     --íóæåí òîëüêî äëÿ äåêðåìåíòà ñ÷åò÷èêà ïðè çàïèñè. 
     awlen_reg_processing : process(CLK)
@@ -520,6 +552,8 @@ begin
             end case;
         end if;
     end process;
+
+
 
     m_axi_awvalid_reg_processing : process(CLK)
     begin
@@ -587,12 +621,16 @@ begin
         end if;
     end process;
 
+
+
     m_axi_bready_reg_processing : process(CLK)
     begin
         if cLK'event AND CLK = '1' then 
             m_axi_bready_reg <= '1';
         end if;
     end process;
+
+
 
     m_axi_wvalid_reg_processing : process(CLK)
     begin
@@ -659,9 +697,13 @@ begin
 
             end case;
         end if;
-    end process;    
-    
+    end process;   
+
+
+
     m_axi_wlast_reg <= '1' when awburst_counter = m_axi_awlen_reg and current_state = WRITE_ST else '0';
+
+
 
     awburst_counter_processing : process(CLK)
     begin
@@ -679,6 +721,8 @@ begin
             end case;
         end if;
     end process;
+
+
 
     fifo_in_sync_counted_xpm_inst : fifo_in_sync_counted_xpm
         generic map (
@@ -703,8 +747,12 @@ begin
             DATA_COUNT      =>  fifo_data_count                  
         );
 
-    in_rden <= '1' when m_axi_wvalid_reg = '1' and M_AXI_WREADY = '1' else '0';
-    fifo_word_count         <= EXT(fifo_data_count(31 downto C_AXSIZE_INT), 32);
+
+
+    in_rden         <= '1' when m_axi_wvalid_reg = '1' and M_AXI_WREADY = '1' else '0';
+    fifo_word_count <= EXT(fifo_data_count(31 downto C_AXSIZE_INT), 32);
+
+
 
     fifo_reset_processing : process(CLK)
     begin
@@ -725,6 +773,7 @@ begin
         end if;
     end process;
 
+
     -- All OK
     write_ability_processing : process(CLK)
     begin
@@ -739,6 +788,8 @@ begin
             end case;
         end if;
     end process;
+
+
 
     current_state_processing : process(CLK)
     begin
@@ -834,6 +885,8 @@ begin
         end if;
     end process;
 
+
+
     has_bresp_flaq_processing : process(CLK)
     begin
         if CLK'event AND CLK = '1' then 
@@ -851,6 +904,7 @@ begin
             end case;
         end if;
     end process;
+
 
 
     fifo_cmd_sync_xpm_inst : fifo_cmd_sync_xpm 
@@ -871,6 +925,8 @@ begin
             EMPTY           =>  cmd_empty                
         );
  
+
+
     queue_volume_reg_processing : process(CLK)
     begin
         if CLK'event AND CLK = '1' then 
@@ -894,9 +950,15 @@ begin
         end if;
     end process;
 
+
+
     cmd_din <= current_address;
 
+
+
     cmd_rden <= FIFO_RDEN;
+
+
 
     cmd_wren_processing : process(CLK)
     begin

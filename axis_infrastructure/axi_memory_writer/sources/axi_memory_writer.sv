@@ -8,7 +8,7 @@ module axi_memory_writer #(
     parameter [31:0] DEFAULT_MEM_STARTADDR       = 32'h00000000,
     parameter [31:0] DEFAULT_MEM_HIGHADDR        = 32'h02000000,
     parameter        DEFAULT_USER_EVENT_DURATION = 100         ,
-    parameter        DEFAULT_PORTION_SIZE        = 1048576      
+    parameter        DEFAULT_PORTION_SIZE        = 1048576
 ) (
     input                          aclk          ,
     input                          aresetn       ,
@@ -33,6 +33,7 @@ module axi_memory_writer #(
     output logic                   S_AXI_RVALID  ,
     input                          S_AXI_RREADY  ,
     // USER EVENT INTERRUPTS
+    output logic [ ADDR_WIDTH-1:0] CURRENT_ADDR  ,
     output logic                   USER_EVENT    ,
     input                          USER_EVENT_ACK,
     // S_AXIS BUS
@@ -81,6 +82,7 @@ module axi_memory_writer #(
     logic                  stop_signal            ;
     logic                  irq_ack                ;
     logic                  status                 ;
+    logic                  suspend_active         ;
     logic                  register_read_event    ;
 
     logic fifo_not_empty   ;
@@ -88,7 +90,7 @@ module axi_memory_writer #(
     logic fifo_wren_impulse;
 
     logic [ADDR_WIDTH-1:0] current_baseaddr       ;
-    logic                  user_event_internal    ;
+    // logic                  user_event_internal    ;
     logic                  user_event_ack_internal;
     logic [          31:0] valid_count            ;
     logic [          31:0] queue_volume           ;
@@ -99,10 +101,16 @@ module axi_memory_writer #(
     // probably, it must be a single strobe, need checking
 
 
+    logic [31:0] reset_counter = '{default:0};
+    localparam RESET_COUNTER_LIMIT = 5;
+
+
+
     always_comb begin : to_user_logic_assignment_group
-        reset_func                    = register[0][0];
-        enable                        = register[1][0];
+        // reset_func                    = register[0][0];
+        // enable                        = register[1][0];
         // irq_ack                       = register[1][8];
+        CURRENT_ADDR                  = current_baseaddr;
         event_dependency              = register[1][25:24];
         portion_size                  = register[2];
         mem_highaddr[ADDR_WIDTH-1:0]  = register[3][ADDR_WIDTH-1:0];
@@ -110,8 +118,12 @@ module axi_memory_writer #(
         user_event_duration           = register[9];
     end 
 
+
+
     always_comb begin : from_usr_logic_assignment_group
+        
         register[1][16] = status;
+        register[1][17] = suspend_active;
         register[1][9]  = queue_overflow_flaq;
         register[4]     = ADDR_WIDTH;
         register[5]     = FREQ_HZ;
@@ -122,6 +134,8 @@ module axi_memory_writer #(
 
     end 
 
+
+
     always_ff @(posedge aclk) begin : user_event_ack_internal_proc
         case (event_dependency) 
             2'b00   : user_event_ack_internal <= USER_EVENT_ACK;
@@ -131,6 +145,8 @@ module axi_memory_writer #(
         endcase // event_dependency
     end  
 
+
+
     always_ff @(posedge aclk) begin : user_event_processing 
         if (register[1][26] == 1'b0)
             USER_EVENT <= fifo_not_empty;
@@ -138,28 +154,103 @@ module axi_memory_writer #(
             USER_EVENT <= fifo_wren_impulse;
     end 
 
-    always_ff @(posedge aclk) begin : d_enable_proc
-        d_enable <= enable;
+
+
+    always_ff @(posedge aclk) begin : reset_processing
+        if ( !aresetn ) begin 
+            reset_func <= 1'b1;
+        end else begin 
+            if (reset_counter < RESET_COUNTER_LIMIT) begin 
+                reset_func <= 1'b1;
+            end else begin  
+                reset_func <= 1'b0;
+            end 
+        end 
+    end  
+
+
+
+    always_ff @(posedge aclk) begin : reset_counter_processing 
+        if (!aresetn) begin 
+            reset_counter <= '{default:0};
+        end else begin 
+            if (reset_counter < RESET_COUNTER_LIMIT) begin 
+                reset_counter <= reset_counter + 1;
+            end else begin 
+                if (S_AXI_AWVALID & S_AXI_AWREADY & S_AXI_WVALID & S_AXI_WREADY) begin 
+                    if (S_AXI_AWADDR[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h00) begin 
+                        if (S_AXI_WDATA[0]) begin 
+                            reset_counter <= {default:0};
+                        end 
+                    end 
+                end 
+            end 
+        end 
     end 
+
+
+    // always_ff @(posedge aclk) begin : d_enable_proc
+    //     d_enable <= enable;
+    // end 
+
+
+
+    // always_ff @(posedge aclk) begin : run_signal_proc 
+    //     if (enable == 1'b1 & d_enable == 1'b0)
+    //         run_signal <= 1'b1;
+    //     else 
+    //         run_signal <= 1'b0;
+    // end
+
+    // always_ff @(posedge aclk) begin : stop_signal_proc
+    //     if (enable == 1'b0 & d_enable == 1'b1)
+    //         stop_signal <= 1'b1;
+    //     else 
+    //         stop_signal <= 1'b0;
+    // end 
+
+
 
     always_ff @(posedge aclk) begin : run_signal_proc 
-        if (enable == 1'b1 & d_enable == 1'b0)
-            run_signal <= 1'b1;
-        else 
+        if (!aresetn | reset_func ) begin 
             run_signal <= 1'b0;
-    end
-
-    always_ff @(posedge aclk) begin : stop_signal_proc
-        if (enable == 1'b0 & d_enable == 1'b1)
-            stop_signal <= 1'b1;
-        else 
-            stop_signal <= 1'b0;
+        end else begin 
+            if (S_AXI_AWVALID & S_AXI_AWREADY & S_AXI_WVALID & S_AXI_WREADY) begin
+                if (S_AXI_AWADDR[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h01) begin
+                    run_signal <= S_AXI_WDATA[0];
+                end else begin 
+                    run_signal <= 1'b0;
+                end 
+            end else begin 
+                run_signal <= 1'b0;
+            end 
+        end  
     end 
+
+
+
+    always_ff @(posedge aclk) begin : stop_signal_proc 
+        if (!aresetn | reset_func ) begin 
+            stop_signal <= 1'b0;
+        end else begin 
+            if (S_AXI_AWVALID & S_AXI_AWREADY & S_AXI_WVALID & S_AXI_WREADY) begin
+                if (S_AXI_AWADDR[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h01) begin
+                    stop_signal <= ~S_AXI_WDATA[0];
+                end else begin 
+                    stop_signal <= 1'b0;
+                end 
+            end else begin 
+                stop_signal <= 1'b0;
+            end 
+        end  
+    end 
+
+    
 
     always_ff @(posedge aclk) begin : irq_ack_proc 
         if (!aresetn) begin  
             irq_ack <= 1'b0;
-        end else 
+        end else begin 
             if (S_AXI_AWVALID & S_AXI_AWREADY & S_AXI_WVALID & S_AXI_WREADY) begin
                 if (S_AXI_AWADDR[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h01) begin
                     irq_ack <= S_AXI_WDATA[8];
@@ -169,10 +260,13 @@ module axi_memory_writer #(
             end else begin 
                 irq_ack <= 1'b0;
             end 
+        end 
     end 
 
+
+
     always_ff @(posedge aclk) begin : queue_overflow_ack_proc 
-        if (!aresetn) begin 
+        if (!aresetn ) begin 
             queue_overflow_ack <= 1'b0;
         end else begin 
             if (S_AXI_AWVALID & S_AXI_AWREADY & S_AXI_WVALID & S_AXI_WREADY) begin
@@ -186,6 +280,8 @@ module axi_memory_writer #(
             end 
         end 
     end 
+
+
 
     always_ff @(posedge aclk) begin : queue_overflow_flaq_proc
         if (!aresetn) begin 
@@ -203,6 +299,8 @@ module axi_memory_writer #(
         end 
     end 
 
+
+
     always_ff @(posedge aclk) begin : register_read_event_proc
         if (!aresetn) begin
             register_read_event <= 1'b0;
@@ -216,6 +314,7 @@ module axi_memory_writer #(
         end
     end 
 
+
     /**/
     always_ff @(posedge aclk) begin : aw_en_processing 
         if (!aresetn) 
@@ -227,6 +326,8 @@ module axi_memory_writer #(
                 if (S_AXI_BREADY & S_AXI_BVALID)
                     aw_en <= 1'b1;
     end 
+
+
 
     /**/
     always_ff @(posedge aclk) begin : S_AXI_AWREADY_processing 
@@ -353,6 +454,7 @@ module axi_memory_writer #(
     end
 
 
+
     always_ff @(posedge aclk) begin : reg_0_processing
         if (!aresetn) 
             register[0] <= 'b0;
@@ -362,20 +464,22 @@ module axi_memory_writer #(
                     register[0] <= S_AXI_WDATA;
     end 
 
+
     /*done*/
     always_ff @(posedge aclk) begin : reg_1_processing
         if (!aresetn) begin
             register[1][8:0]   <= 'b0;
             register[1][15:10] <= 'b0;
-            register[1][31:17] <= 'b0;
+            register[1][31:18] <= 'b0;
         end else
         if (S_AXI_AWVALID & S_AXI_AWREADY & S_AXI_WVALID & S_AXI_WREADY)
             if (S_AXI_AWADDR[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h01) begin
-                register[1][7:0]   <= S_AXI_WDATA[7:0];
+                register[1][7:1]   <= S_AXI_WDATA[7:1];
                 register[1][15:10] <= S_AXI_WDATA[15:9];
-                register[1][31:17] <= S_AXI_WDATA[31:17];
+                register[1][31:18] <= S_AXI_WDATA[31:18];
             end
     end 
+
 
     /*done*/
     always_ff @(posedge aclk) begin : reg_2_processing 
@@ -387,6 +491,8 @@ module axi_memory_writer #(
                     register[2] <= S_AXI_WDATA;
     end 
 
+
+
     always_ff @(posedge aclk) begin : reg_3_processing 
         if (!aresetn)
             register[3] <= DEFAULT_MEM_HIGHADDR;
@@ -395,6 +501,8 @@ module axi_memory_writer #(
                 if (S_AXI_AWADDR[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h03)
                     register[3] <= S_AXI_WDATA;
     end 
+
+
 
     always_ff @(posedge aclk) begin : reg_9_processing 
         if (!aresetn)
@@ -425,6 +533,7 @@ module axi_memory_writer #(
         
         .VALID_COUNTER   (valid_count            ),
         .STATUS          (status                 ),
+        .SUSPEND_ACTIVE  (suspend_active         ),
         
         .FIFO_NOT_EMPTY  (fifo_not_empty         ),
         .FIFO_WREN       (fifo_wren              ),
