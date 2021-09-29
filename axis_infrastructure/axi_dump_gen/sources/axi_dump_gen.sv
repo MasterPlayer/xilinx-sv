@@ -2,7 +2,7 @@
 
 module axi_dump_gen #(
     parameter FREQ_HZ              = 250000000,
-    parameter N_BYTES              = 2        ,
+    parameter N_BYTES              = 4        ,
     parameter ASYNC                = 1'b0     ,
     parameter MODE                 = "SINGLE" , // "SINGLE", "ZEROS", "BYTE"
     parameter SWAP_BYTES           = 1'b0     ,
@@ -12,7 +12,7 @@ module axi_dump_gen #(
 ) (
     input                          aclk         ,
     input                          aresetn      ,
-    input        [            4:0] awaddr       ,
+    input        [            5:0] awaddr       ,
     input        [            2:0] awprot       ,
     input                          awvalid      ,
     output logic                   awready      ,
@@ -23,7 +23,7 @@ module axi_dump_gen #(
     output logic [            1:0] bresp        ,
     output logic                   bvalid       ,
     input                          bready       ,
-    input        [            4:0] araddr       ,
+    input        [            5:0] araddr       ,
     input        [            2:0] arprot       ,
     input                          arvalid      ,
     output logic                   arready      ,
@@ -40,15 +40,19 @@ module axi_dump_gen #(
 );
 
     localparam integer ADDR_LSB = 2;
-    localparam integer ADDR_OPT = 2;
+    localparam integer ADDR_OPT = 3;
 
-    logic [7:0][31:0] register;
+    logic [11:0][31:0] register;
 
     logic        reset            ;
-    logic        run_stop         ;
-    logic        d_run_stop       ;
-    logic        event_start      ;
-    logic        event_stop       ;
+    // logic        run_stop         ;
+    // logic        d_run_stop       ;
+
+    logic run_flaq;
+    logic stop_flaq;
+
+    // logic        event_start      ;
+    // logic        event_stop       ;
     logic        ignore_ready     ;
     logic        status           ;
     logic [31:0] packet_size      ;
@@ -56,6 +60,12 @@ module axi_dump_gen #(
     logic [31:0] pause            ;
     logic [31:0] valid_count      ;
     logic        m_axis_tready_cdc;
+
+    logic [63:0] data_count;
+    logic [63:0] packet_count;
+
+    logic [31:0] reset_counter = '{default:0};
+    localparam RESET_COUNTER_LIMIT = 3;
 
     logic device_not_ready_flaq ; 
 
@@ -79,34 +89,88 @@ module axi_dump_gen #(
         end 
     end 
 
-
-    always_ff @(posedge aclk) begin : d_run_stop_proc
-        d_run_stop <= run_stop;
+    always_ff @(posedge aclk) begin : run_flaq_processing 
+        if (awvalid & awready & wvalid & wready) begin 
+            if (awaddr[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h01) begin 
+                run_flaq <= wdata[0];
+            end else begin 
+                run_flaq <= 1'b0;
+            end 
+        end else begin 
+            run_flaq <= 1'b0;
+        end 
     end 
 
-    always_comb begin 
-        if (run_stop & !d_run_stop)
-            event_start = 1'b1;
-        else 
-            event_start = 1'b0;
+    always_ff @(posedge aclk) begin : stop_flaq_processing 
+        if (awvalid & awready & wvalid & wready) begin 
+            if (awaddr[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h01) begin 
+                stop_flaq <= ~wdata[0];
+            end else begin 
+                stop_flaq <= 1'b0;
+            end 
+        end else begin 
+            stop_flaq <= 1'b0;
+        end 
     end 
 
-    always_comb begin 
-        if (!run_stop & d_run_stop)
-            event_stop = 1'b1;
-        else 
-            event_stop = 1'b0;
-    end 
+
+    // always_ff @(posedge aclk) begin : d_run_stop_proc
+    //     d_run_stop <= run_stop;
+    // end 
+
+    // always_comb begin 
+    //     if (run_stop & !d_run_stop)
+    //         event_start = 1'b1;
+    //     else 
+    //         event_start = 1'b0;
+    // end 
+
+    // always_comb begin 
+    //     if (!run_stop & d_run_stop)
+    //         event_stop = 1'b1;
+    //     else 
+    //         event_stop = 1'b0;
+    // end 
 
 
 
     always_comb begin : to_user_logic_assignment_group
-        reset        = register[0][0];
-        run_stop     = register[1][0];
+        // reset        = register[0][0];
+        // run_stop     = register[1][0];
         ignore_ready = register[1][1];
         packet_size  = register[2];
         packet_limit = register[3];
         pause        = register[4];
+    end 
+
+    always_ff @(posedge aclk) begin : reset_processing
+        if ( !aresetn ) begin 
+            reset <= 1'b1;
+        end else begin 
+            if (reset_counter < RESET_COUNTER_LIMIT) begin 
+                reset <= 1'b1;
+            end else begin  
+                reset <= 1'b0;
+            end 
+        end 
+    end  
+
+    always_ff @(posedge aclk) begin : reset_counter_processing 
+        if (!aresetn) begin 
+            reset_counter <= '{default:0};
+        end else begin 
+            if (reset_counter < RESET_COUNTER_LIMIT) begin 
+                reset_counter <= reset_counter + 1;
+            end else begin 
+                if (awvalid & awready & wvalid & wready) begin 
+                    if (awaddr[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h00) begin 
+                        if (wdata[0]) begin 
+                            reset_counter <= {default:0};
+                        end 
+                    end 
+                end 
+            end 
+        end 
     end 
 
     always_comb begin : from_usr_logic_assignment_group
@@ -115,17 +179,24 @@ module axi_dump_gen #(
         register[5]     = FREQ_HZ;
         register[6]     = valid_count;
         register[7]     = N_BYTES*8;
+        register[8]     = data_count[63:32];
+        register[9]     = data_count[31:0];
+        register[10]    = packet_count[63:32];
+        register[11]    = packet_count[31:0];
     end 
 
     always_ff @(posedge aclk) begin : device_not_ready_flaq_processing 
-        if (!aresetn | !run_stop) begin 
+        if (!aresetn | reset ) begin 
             device_not_ready_flaq <= 1'b0;
         end else begin 
-            if (ignore_ready) begin 
-
+            // if (ignore_ready) begin 
                 if (!device_not_ready_flaq) begin 
                     if (!m_axis_tready_cdc) begin 
-                        device_not_ready_flaq <= 1'b1;
+                        if (status) begin 
+                            device_not_ready_flaq <= 1'b1;
+                        end else begin 
+                            device_not_ready_flaq <= device_not_ready_flaq;
+                        end 
                     end else begin 
                         device_not_ready_flaq <= device_not_ready_flaq;
                     end 
@@ -139,9 +210,9 @@ module axi_dump_gen #(
                         device_not_ready_flaq <= device_not_ready_flaq;
                     end                     
                 end 
-            end else begin 
-                device_not_ready_flaq <= 1'b0;
-            end 
+            // end else begin 
+            //     device_not_ready_flaq <= 1'b0;
+            // end 
         end 
     end 
 
@@ -167,7 +238,7 @@ module axi_dump_gen #(
             else 
                 awready <= 1'b0;
     end 
-
+ 
 
 
     always_ff @(posedge aclk) begin : wready_processing 
@@ -238,6 +309,10 @@ module axi_dump_gen #(
                     'h5 : rdata <= register[5];
                     'h6 : rdata <= register[6];
                     'h7 : rdata <= register[7];
+                    'h8 : rdata <= register[8];
+                    'h9 : rdata <= register[9];
+                    'hA : rdata <= register[10];
+                    'hB : rdata <= register[11];
                     default : rdata <= rdata;
                 endcase // araddr
     end 
@@ -258,6 +333,10 @@ module axi_dump_gen #(
                     'h5 : rresp <= '{default:0};
                     'h6 : rresp <= '{default:0};
                     'h7 : rresp <= '{default:0};
+                    'h8 : rresp <= '{default:0};
+                    'h9 : rresp <= '{default:0};
+                    'hA : rresp <= '{default:0};
+                    'hB : rresp <= '{default:0};
                     default : rresp <= 'b10;
                 endcase; // araddr
     end                     
@@ -269,7 +348,7 @@ module axi_dump_gen #(
             bresp <= '{default:0};
         else
             if (awvalid & awready & wvalid & wready & ~bvalid)
-                if (awaddr >= 0 | awaddr <= 7 )
+                if (awaddr[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] >= 0 | awaddr[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] <= 11 )
                     bresp <= '{default:0};
                 else
                     bresp <= 'b10;
@@ -278,16 +357,18 @@ module axi_dump_gen #(
 
     always_ff @(posedge aclk) begin : reg_0_processing
         if (!aresetn) 
-            register[0] <= 'b0;
+            register[0][31:0] <= 'b0;
         else
             if (awvalid & awready & wvalid & wready)
-                if (awaddr[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h00)
-                    register[0] <= wdata;
+                if (awaddr[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h00) begin 
+                    register[0][31:1] <= wdata[31:1];
+                    register[0][0] <= 1'b0;
+                end 
     end 
 
     /*done*/
     always_ff @(posedge aclk) begin : reg_1_processing 
-        if (!aresetn) begin  
+        if (!aresetn | reset ) begin  
             register[1][15:0] <= 'b0;
             register[1][31:18] <= 'b0;
         end else 
@@ -334,27 +415,30 @@ module axi_dump_gen #(
         .ASYNC     (ASYNC     ),
         .MODE      (MODE      ),
         .SWAP_BYTES(SWAP_BYTES)
-    ) axis_dump_gen (
-        .CLK          (aclk         ),
-        .RESET        (reset        ),
+    ) axis_dump_gen_inst (
+        .CLK          (aclk                   ),
+        .RESET        (reset                  ),
         
-        .EVENT_START  (event_start  ),
-        .EVENT_STOP   (event_stop   ),
-        .IGNORE_READY (ignore_ready ),
-        .STATUS       (status       ),
+        .EVENT_START  (run_flaq/*event_start*/),
+        .EVENT_STOP   (stop_flaq/*event_stop*/),
+        .IGNORE_READY (ignore_ready           ),
+        .STATUS       (status                 ),
         
-        .PAUSE        (pause        ),
-        .PACKET_SIZE  (packet_size  ),
-        .PACKET_LIMIT (packet_limit ),
+        .PAUSE        (pause                  ),
+        .PACKET_SIZE  (packet_size            ),
+        .PACKET_LIMIT (packet_limit           ),
         
-        .VALID_COUNT  (valid_count  ),
+        .VALID_COUNT  (valid_count            ),
+        .DATA_COUNT   (data_count             ),
+        .PACKET_COUNT (packet_count           ),
         
-        .M_AXIS_CLK   (M_AXIS_CLK   ),
-        .M_AXIS_TDATA (M_AXIS_TDATA ),
-        .M_AXIS_TKEEP (M_AXIS_TKEEP ),
-        .M_AXIS_TVALID(M_AXIS_TVALID),
-        .M_AXIS_TREADY(M_AXIS_TREADY),
-        .M_AXIS_TLAST (M_AXIS_TLAST )
+        
+        .M_AXIS_CLK   (M_AXIS_CLK             ),
+        .M_AXIS_TDATA (M_AXIS_TDATA           ),
+        .M_AXIS_TKEEP (M_AXIS_TKEEP           ),
+        .M_AXIS_TVALID(M_AXIS_TVALID          ),
+        .M_AXIS_TREADY(M_AXIS_TREADY          ),
+        .M_AXIS_TLAST (M_AXIS_TLAST           )
     );
 
 

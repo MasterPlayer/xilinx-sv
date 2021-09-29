@@ -30,6 +30,8 @@ entity axis_dump_gen is
         PACKET_LIMIT            :   in      std_logic_Vector ( 31 downto 0 )                    ;
 
         VALID_COUNT             :   out     std_logic_vector ( 31 downto 0 )                    ;
+        DATA_COUNT              :   out     std_logic_Vector ( 63 downto 0 )                    ;
+        PACKET_COUNT            :   out     std_logic_Vector ( 63 downto 0 )                    ;
 
         M_AXIS_CLK              :   in      std_logic                                           ;
         M_AXIS_TDATA            :   out     std_logic_Vector ( (N_BYTES*8)-1 downto 0 )         ;
@@ -44,7 +46,7 @@ end axis_dump_gen;
 
 architecture axis_dump_gen_arch of axis_dump_gen is
     
-    constant VERSION : string := "v2.0";
+    constant VERSION : string := "v2.1";
     
     ATTRIBUTE X_INTERFACE_INFO : STRING;
     ATTRIBUTE X_INTERFACE_INFO of RESET: SIGNAL is "xilinx.com:signal:reset:1.0 RESET RST";
@@ -152,11 +154,62 @@ architecture axis_dump_gen_arch of axis_dump_gen is
     signal  event_stop_flaq     :           std_logic := '0';
     signal  write_accepted      :           std_Logic := '0';
 
+    signal  data_count_reg      :           std_logic_vector ( 63 downto 0 ) := (others => '0');
+    signal  packet_count_reg      :           std_logic_vector ( 63 downto 0 ) := (others => '0');
+
+
 begin
 
     STATUS      <= status_reg;
 
     VALID_COUNT <= valid_count_reg;
+
+    DATA_COUNT      <= data_count_reg;
+    PACKET_COUNT    <= packet_count_reg;
+
+    data_count_reg_processing : process(CLK)
+    begin
+        if CLK'event AND CLK = '1' then 
+            case current_state is 
+                when IDLE_ST => 
+                    if EVENT_START = '1' then 
+                        data_count_reg <= (others => '0');
+                    else
+                        data_count_reg <= data_count_reg;
+                    end if;
+
+                when others => 
+                    if out_wren = '1' then 
+                        data_count_reg <= data_count_reg + N_BYTES;
+                    else
+                        data_count_reg <= data_count_reg;
+                    end if;
+            end case;
+        end if;
+    end process;
+
+
+    packet_count_reg_processing : process(CLK)
+    begin
+        if CLK'event AND CLK = '1' then 
+            case current_state is 
+                when IDLE_ST => 
+                    if EVENT_START = '1' then 
+                        packet_count_reg <= (others => '0');
+                    else
+                        packet_count_reg <= packet_count_reg;
+                    end if;
+
+                when others => 
+                    if out_wren = '1' and out_din_last = '1' then 
+                        packet_count_reg <= packet_count_reg + 1;
+                    else
+                        packet_count_reg <= packet_count_reg;
+                    end if;
+
+            end case;
+        end if;
+    end process;
 
 
     event_stop_flaq_processing : process(CLK)

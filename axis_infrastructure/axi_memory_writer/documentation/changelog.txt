@@ -1,0 +1,48 @@
+v.1.3 (Rev. 3)
+    - Add SUSPEND_ACTIVE flaq for indicate state when writer in PAUSE state after sending stop signal, 
+    and no active AXI-Full transactions
+
+v1.3 (Rev. 2)
+    - Add current_address port for debug
+
+v1.3 (Rev. 1)
+    - Change behaviour for reset
+    - Change behaviour for run/stop
+    - Fix error with valid_count registry 
+
+v1.2 (Rev. 4)
+22.09.2021
+    - Review inteface ports for component, adn rename
+
+v1.2 (Rev. 3)
+22.09.2021
+    - Add IRQ_MODE: 
+        1) if 0 then not(cmd_empty) generate USER_EVENT signal 
+        2) if 1 then fifo_wren generate USER_EVENT signal with duration from register with offset 0x24 
+
+v1.2 (Rev. 2)
+22.09.2021
+    - Add QUEUE_OVERFLOW flaq which indicates to user level about queue, which holds CURRENT_ADDRESS parameters is overload
+    - Add control logic for QUEUE_OVERFLOW for AXI-Lite control interface
+
+v1.2 (Rev. 1)
+22.09.2021
+    - Add duration parameter for USER_EVENT generate
+    - Add counter for estimate command queue which holds CURRENT_ADDRESS parameter
+    - Changed USER_EVENT generation 
+
+v1.1 (Rev. 2)
+    - Minor changes
+
+v1.1 (Rev. 1)
+    - Remove debug logic from internal blocks
+
+v1.0 (Rev. 6)
+    - Fix error in debug ila
+
+v1.0 (Rev. 5)
+    - Add debug logic for control output cmd fifo
+
+v1.0
+    - First Release 
+

@@ -1,0 +1,54 @@
+v1.4 (Rev. 1)
+28.09.2021
+    - Change RUN_STOP signal behaviour
+    - Change DEVICE_NOT_READY behaviour 
+    - Change RESET signal behaviour
+    - Extend address space 
+    - Added new registers : DATA_COUNT, PACKET_COUNT for indicates count of all data/packet for this serie
+
+v1.3 (Rev. 2)
+20.09.2021
+    - Fixed error : wrong register assign to functional part
+
+v1.3 (Rev. 2)
+20.09.2021
+    - Fixed error : internal counter for packet size has 16 bit, 
+    but external signal PACKET_SIZE is 32 bit width. Solution: changed 
+    packet_size_cnt to 32 bit width.
+
+
+v1.3 (Rev. 1)
+20.09.2021
+    - Changed PACKET_LIMIT counter behavior
+    - RUN/STOP internal port changes to EVENT_START and EVENT_STOP which works independently
+    - FSM transition changes for functional logic of dump generator
+    - Other changes 
+    
+
+v1.2 (Rev. 3)
+16.09.2021
+    - Minor changes
+    
+v1.2 (Rev. 3)
+16.09.2021
+    - Minor changes
+
+v1.2 (Rev. 2)
+16.09.2021
+    - Add DEVICE_NOT_READY field in register[1] for indicates when 
+    slave device not ready for receive current word when IGNORE_READY mode is activated.
+    When IGNORE_READY is 0, this field always 0
+
+v1.2 (Rev. 1)
+16.09.2021
+    - Fix issue with IGNORE_READY work
+    - Add defaults value from Vivado IP configurator:
+    1) default packet size
+    2) default packet_limit
+    3) default pause
+    - Fix RUN/STOP processing for internal logic 
+    - Add constraints file for false_path
+
+v1.0
+    First Release 
+
