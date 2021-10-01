@@ -1,3 +1,26 @@
+v1.1 (Rev. 5)
+    - Add debug ports for control different over internal counter and AXI_WDATA
+    - Remove ILA
+    
+v1.1 (Rev. 4)
+    - Minor changes
+
+v1.1 (Rev. 3)
+    - Add debug logic and ila
+
+v1.1 (Rev. 2)
+    - Fixed error in customization gui
+
+v1.1 (Rev. 1)
+1.10.2021
+    - Add CYCLIC mode, which reload internal data counter for first value after portion size exceeded
+    - Extend registry file : add PORTION_SIZE register for cyclic mode internal counter
+
+v1.0 (Rev. 3)
+30.09.2021
+    - Fix issue with awready signal assignment, previous was error
+    - Fix issue with default values setup to registers 
+    
 v1.0 (Rev. 2)
 27.09.2021
     * First release

@@ -21,12 +21,16 @@ entity axis_checker is
         S_AXIS_TREADY           :   out     std_logic                                       ;
         S_AXIS_TLAST            :   in      std_logic                                       ;
 
-        
+        MODE_RST_COUNTER        :   in      std_logic                                       ;
+        PORTION_SIZE            :   in      std_logic_Vector ( 31 downto 0 )                ;
         ENABLE                  :   in      std_logic                                       ;
         PACKET_SIZE             :   in      std_logic_vector ( 31 downto 0 )                ;
 
         READY_LIMIT             :   in      std_logic_Vector ( 31 downto 0 )                ;
         NOT_READY_LIMIT         :   in      std_logic_Vector ( 31 downto 0 )                ;
+
+        DBG_CNT_FILL            :   out     std_logic_vector ( (N_BYTES*8)-1 downto 0 )     ;
+        DBG_HAS_DATA_ERROR      :   out     std_logic                                       ;
 
         IGNORE_DATA_ERROR       :   in      std_Logic                                       ;
         IGNORE_PACKET_ERROR     :   in      std_Logic                                       ;
@@ -77,7 +81,35 @@ architecture axis_checker_arch of axis_checker is
     signal  has_packet_err_reg  :           std_logic                           := '0'                              ;
     signal  packet_size_cnt     :           std_logic_vector ( 31 downto 0 )    := x"00000001"                      ;        
     signal  packet_size_reg     :           std_logic_vector ( 31 downto 0 )    := (others => '0')                  ;
+
+    signal  portion_size_reg    :           std_logic_Vector ( 31 downto 0 )    := (others => '0')                  ;
+    signal  portion_size_cnt    :           std_logic_vector ( 31 downto 0 )    := (others => '0')                  ;
+
+    --component ila_checker 
+    --    port (
+    --        clk             : in std_Logic                              ;
+    --        probe0          : in std_Logic_vector ( 63  downto 0 )      ;
+    --        probe1          : in std_Logic_vector ( 63  downto 0 )      ;
+    --        probe2          : in std_Logic_vector (  0  downto 0 )      ;
+    --        probe3          : in std_Logic_vector (  0  downto 0 )       
+    --    );
+    --end component;
+
 begin
+
+
+
+    --ila_checker_inst : ila_checker 
+    --    port map (
+    --        clk        =>  CLK              ,
+    --        probe0     =>  S_AXIS_TDATA     ,
+    --        probe1     =>  cnt_fill         ,
+    --        probe2(0)  =>  S_AXIS_TVALID    ,
+    --        probe3(0)  =>  has_data_err_reg     
+    --    );
+
+    DBG_CNT_FILL           <=  cnt_fill;
+    DBG_HAS_DATA_ERROR     <=  has_data_err_reg;
 
     S_AXIS_TREADY <= s_axis_tready_reg;
 
@@ -88,6 +120,42 @@ begin
 
     DATA_ERROR      <= data_error_reg       ;
     PACKET_ERROR    <= packet_error_reg     ;
+
+    portion_size_reg_processing : process(CLK)
+    begin
+        if CLK'event AND CLK = '1' then 
+            case current_state is 
+                when IDLE_ST => 
+                    if ENABLE = '1' then 
+                        portion_size_reg <= PORTION_SIZE - N_BYTES;
+                    else
+                        portion_size_reg <= portion_size;
+                    end if;
+
+                when others => 
+                    portion_size_reg <= portion_size_reg;
+            end case;
+        end if;
+    end process;
+
+    portion_size_cnt_processing : process(CLK)
+    begin
+        if CLK'event AND CLK = '1' then 
+            if ENABLE = '1' then 
+                if S_AXIS_TVALID = '1' and s_axis_tready_reg = '1' then 
+                    if portion_size_cnt < portion_size_reg then 
+                        portion_size_cnt <= portion_size_cnt + N_BYTES;
+                    else
+                        portion_size_cnt <= (others => '0');
+                    end if;
+                else
+                    portion_size_cnt <= portion_size_cnt;
+                end if;
+            else
+                portion_size_cnt <= (others => '0');
+            end if;
+        end if;
+    end process;
 
     packet_size_reg_processing : process(CLK)
     begin
@@ -252,7 +320,6 @@ begin
                     else
                         cnt_fill <= (others => '0') ;
                     end if;
-
                 end if;
             end if;
         end process;
@@ -263,17 +330,31 @@ begin
                 if RESET = '1' then 
                     save_for_first <= '1';
                 else
-                    
-                    if ENABLE = '1' then 
-                        if S_AXIS_TVALID = '1' and s_axis_tready_reg = '1' then 
-                            save_for_first <= '0';
+                    if MODE_RST_COUNTER = '0' then 
+                        if ENABLE = '1' then 
+                            if S_AXIS_TVALID = '1' and s_axis_tready_reg = '1' then 
+                                save_for_first <= '0';
+                            else
+                                save_for_first <= save_for_first;
+                            end if;
                         else
-                            save_for_first <= save_for_first;
+                            save_for_first <= '1';
                         end if;
                     else
-                        save_for_first <= '1';
+                        if ENABLE = '1' then 
+                            if S_AXIS_TVALID = '1' and s_axis_tready_reg = '1' then 
+                                if portion_size_cnt = portion_size_reg then 
+                                    save_for_first <= '1';
+                                else
+                                    save_for_first <= '0';
+                                end if;
+                            else
+                                save_for_first <= save_for_first;
+                            end if;
+                        else
+                            save_for_first <= '1';
+                        end if;
                     end if;
-
                 end if;
             end if;
         end process;

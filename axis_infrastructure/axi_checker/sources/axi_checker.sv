@@ -8,6 +8,7 @@ module axi_checker #(
     parameter DEFAULT_READY_LIMIT  = 4096     ,
     parameter DEFAULT_BUSY_LIMIT   = 0        ,
     parameter DEFAULT_PACKET_SIZE  = 4096     ,
+    parameter DEFAULT_PORTION_SIZE = 1048576  ,
     parameter S_AXI_ID_WIDTH       = 1        ,
     parameter S_AXI_ADDR_WIDTH     = 20       ,
     parameter C_S_AXI_ID_WIDTH     = 0        ,
@@ -16,48 +17,53 @@ module axi_checker #(
     parameter C_S_AXI_WUSER_WIDTH  = 0
 ) (
     // AXI-LITE interface
-    input                               aclk          ,
-    input                               aresetn       ,
-    input        [                 5:0] awaddr        ,
-    input        [                 2:0] awprot        ,
-    input                               awvalid       ,
-    output logic                        awready       ,
-    input        [                31:0] wdata         ,
-    input        [                 3:0] wstrb         ,
-    input                               wvalid        ,
-    output logic                        wready        ,
-    output logic [                 1:0] bresp         ,
-    output logic                        bvalid        ,
-    input                               bready        ,
-    input        [                 5:0] araddr        ,
-    input        [                 2:0] arprot        ,
-    input                               arvalid       ,
-    output logic                        arready       ,
-    output logic [                31:0] rdata         ,
-    output logic [                 1:0] rresp         ,
-    output logic                        rvalid        ,
-    input                               rready        ,
+    input                               aclk              ,
+    input                               aresetn           ,
+    input        [                 5:0] awaddr            ,
+    input        [                 2:0] awprot            ,
+    input                               awvalid           ,
+    output logic                        awready           ,
+    input        [                31:0] wdata             ,
+    input        [                 3:0] wstrb             ,
+    input                               wvalid            ,
+    output logic                        wready            ,
+    output logic [                 1:0] bresp             ,
+    output logic                        bvalid            ,
+    input                               bready            ,
+    input        [                 5:0] araddr            ,
+    input        [                 2:0] arprot            ,
+    input                               arvalid           ,
+    output logic                        arready           ,
+    output logic [                31:0] rdata             ,
+    output logic [                 1:0] rresp             ,
+    output logic                        rvalid            ,
+    input                               rready            ,
+    // DEBUG group
+    output logic [   ((N_BYTES*8)-1):0] DBG_CNT_FILL      ,
+    output logic                        DBG_HAS_DATA_ERROR,
+    output logic [   ((N_BYTES*8)-1):0] DBG_S_AXIS_TDATA  ,
+    output logic                        DBG_S_AXIS_TVALID ,
     // AXI-FULL interface as slave
-    input        [  S_AXI_ID_WIDTH-1:0] S_AXI_AWID    ,
-    input        [S_AXI_ADDR_WIDTH-1:0] S_AXI_AWADDR  ,
-    input        [                 7:0] S_AXI_AWLEN   ,
-    input        [                 2:0] S_AXI_AWSIZE  ,
-    input        [                 1:0] S_AXI_AWBURST ,
-    input                               S_AXI_AWLOCK  ,
-    input        [                 3:0] S_AXI_AWCACHE ,
-    input        [                 2:0] S_AXI_AWPROT  ,
-    input        [                 3:0] S_AXI_AWQOS   ,
-    input        [                 3:0] S_AXI_AWREGION,
-    input                               S_AXI_AWVALID ,
-    output logic                        S_AXI_AWREADY ,
-    input        [     (N_BYTES*8)-1:0] S_AXI_WDATA   ,
-    input        [         N_BYTES-1:0] S_AXI_WSTRB   ,
-    input                               S_AXI_WLAST   ,
-    input                               S_AXI_WVALID  ,
-    output logic                        S_AXI_WREADY  ,
-    output logic [  S_AXI_ID_WIDTH-1:0] S_AXI_BID     ,
-    output logic [                 1:0] S_AXI_BRESP   ,
-    output logic                        S_AXI_BVALID  ,
+    input        [  S_AXI_ID_WIDTH-1:0] S_AXI_AWID        ,
+    input        [S_AXI_ADDR_WIDTH-1:0] S_AXI_AWADDR      ,
+    input        [                 7:0] S_AXI_AWLEN       ,
+    input        [                 2:0] S_AXI_AWSIZE      ,
+    input        [                 1:0] S_AXI_AWBURST     ,
+    input                               S_AXI_AWLOCK      ,
+    input        [                 3:0] S_AXI_AWCACHE     ,
+    input        [                 2:0] S_AXI_AWPROT      ,
+    input        [                 3:0] S_AXI_AWQOS       ,
+    input        [                 3:0] S_AXI_AWREGION    ,
+    input                               S_AXI_AWVALID     ,
+    output logic                        S_AXI_AWREADY     ,
+    input        [     (N_BYTES*8)-1:0] S_AXI_WDATA       ,
+    input        [         N_BYTES-1:0] S_AXI_WSTRB       ,
+    input                               S_AXI_WLAST       ,
+    input                               S_AXI_WVALID      ,
+    output logic                        S_AXI_WREADY      ,
+    output logic [  S_AXI_ID_WIDTH-1:0] S_AXI_BID         ,
+    output logic [                 1:0] S_AXI_BRESP       ,
+    output logic                        S_AXI_BVALID      ,
     input                               S_AXI_BREADY
 );
 
@@ -77,17 +83,20 @@ module axi_checker #(
     logic                 chk_s_axis_tready      ;
     logic                 chk_s_axis_tlast       ;
 
-    logic                 chk_reset              ;
-    logic                 chk_enable             ;
-    logic [         31:0] chk_packet_size        ;
-    logic [         31:0] chk_ready_limit        ;
-    logic [         31:0] chk_not_ready_limit    ;
-    logic                 chk_ignore_data_error  ;
-    logic                 chk_ignore_packet_error;
-    logic [         31:0] chk_data_error         ;
-    logic [         31:0] chk_packet_error       ;
-    logic [         31:0] chk_data_speed         ;
-    logic [         31:0] chk_packet_speed       ;
+    logic        chk_reset              ;
+    logic        chk_enable             ;
+    logic [31:0] chk_packet_size        ;
+    logic [31:0] chk_portion_size       ;
+    logic [31:0] chk_ready_limit        ;
+    logic [31:0] chk_not_ready_limit    ;
+    logic        chk_ignore_data_error  ;
+    logic        chk_ignore_packet_error;
+    logic [31:0] chk_data_error         ;
+    logic [31:0] chk_packet_error       ;
+    logic [31:0] chk_data_speed         ;
+    logic [31:0] chk_packet_speed       ;
+
+    logic chk_mode_rst_counter;
 
     always_comb begin
         S_AXI_AWREADY = axi_full_awready;
@@ -95,13 +104,17 @@ module axi_checker #(
         S_AXI_BRESP   = 'b0;
         S_AXI_BVALID  = axi_full_bvalid;
         S_AXI_BID     = S_AXI_AWID;
+
+        DBG_S_AXIS_TDATA = chk_s_axis_tdata;
+        DBG_S_AXIS_TVALID = chk_s_axis_tvalid;
+
     end 
 
     always_ff @(posedge aclk) begin : axi_full_awready_processing
         if (~aresetn) begin
             axi_full_awready <= 1'b0;
         end else begin
-            if (axi_full_awready & S_AXI_AWVALID & ~axi_full_awv_awr_flag & chk_s_axis_tready) begin
+            if (~axi_full_awready & S_AXI_AWVALID & ~axi_full_awv_awr_flag & chk_s_axis_tready) begin
                 axi_full_awready <= 1'b1;
             end else begin
                 axi_full_awready <= 1'b0;
@@ -153,18 +166,22 @@ module axi_checker #(
     /***************************************** AXI FULL block ******************************************/
 
 
-    logic [11:0][31:0] register;
+    logic [12:0][31:0] register;
 
     logic aw_en = 1'b1;
 
     always_comb begin : to_user_logic_assignment_group
         chk_reset               = register[0][0];
+        
         chk_enable              = register[1][0];
         chk_ignore_data_error   = register[1][1];
         chk_ignore_packet_error = register[1][2];
+        chk_mode_rst_counter    = register[1][3];
+
         chk_packet_size         = register[2];
         chk_ready_limit         = register[3];
         chk_not_ready_limit     = register[4];
+        chk_portion_size        = register[12];
     end 
 
     always_comb begin : from_usr_logic_assignment_group
@@ -274,6 +291,7 @@ module axi_checker #(
                     'h9     : rdata <= register[9];
                     'hA     : rdata <= register[10];
                     'hB     : rdata <= register[11];
+                    'hC     : rdata <= register[12];
                     default : rdata <= rdata;
                 endcase // araddr
     end 
@@ -298,6 +316,7 @@ module axi_checker #(
                     'h9     : rresp <= '{default:0};
                     'hA     : rresp <= '{default:0};
                     'hB     : rresp <= '{default:0};
+                    'hC     : rresp <= '{default:0};
                     default : rresp <= 'b10;
                 endcase; // araddr
     end                     
@@ -309,12 +328,11 @@ module axi_checker #(
             bresp <= '{default:0};
         else
             if (awvalid & awready & wvalid & wready & ~bvalid)
-                if (awaddr >= 0 | awaddr <= 11 )
+                if (awaddr >= 0 | awaddr <= 12 )
                     bresp <= '{default:0};
                 else
                     bresp <= 'b10;
     end
-
 
     always_ff @(posedge aclk) begin : reg_0_processing
         if (!aresetn) 
@@ -336,7 +354,7 @@ module axi_checker #(
 
     always_ff @(posedge aclk) begin : reg_2_processing
         if (!aresetn) 
-            register[2] <= 'b0;
+            register[2] <= DEFAULT_PACKET_SIZE;
         else
             if (awvalid & awready & wvalid & wready)
                 if (awaddr[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h02)
@@ -345,7 +363,7 @@ module axi_checker #(
 
     always_ff @(posedge aclk) begin : reg_3_processing
         if (!aresetn) 
-            register[3] <= 'b0;
+            register[3] <= DEFAULT_READY_LIMIT;
         else
             if (awvalid & awready & wvalid & wready)
                 if (awaddr[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h03)
@@ -354,11 +372,21 @@ module axi_checker #(
 
     always_ff @(posedge aclk) begin : reg_4_processing
         if (!aresetn) 
-            register[4] <= 'b0;
+            register[4] <= DEFAULT_BUSY_LIMIT;
         else
             if (awvalid & awready & wvalid & wready)
                 if (awaddr[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h04)
                     register[4] <= wdata;
+    end 
+
+    always_ff @(posedge aclk) begin : reg_12_processing 
+        if (!aresetn)
+            register[12] <= DEFAULT_PORTION_SIZE;
+        else 
+            if (awvalid & awready & wvalid & wready)
+                if (awaddr[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h0C)
+                    register[12] <= wdata;
+
     end 
 
     always_comb begin 
@@ -401,8 +429,14 @@ module axi_checker #(
         .S_AXIS_TREADY      (chk_s_axis_tready      ),
         .S_AXIS_TLAST       (chk_s_axis_tlast       ),
         
+        .DBG_CNT_FILL       (DBG_CNT_FILL           ),
+        .DBG_HAS_DATA_ERROR (DBG_HAS_DATA_ERROR     ),
+        
+        
+        .MODE_RST_COUNTER   (chk_mode_rst_counter   ),
         .ENABLE             (chk_enable             ),
         .PACKET_SIZE        (chk_packet_size        ),
+        .PORTION_SIZE       (chk_portion_size       ),
         
         .READY_LIMIT        (chk_ready_limit        ),
         .NOT_READY_LIMIT    (chk_not_ready_limit    ),
