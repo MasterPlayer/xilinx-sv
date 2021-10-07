@@ -291,6 +291,7 @@ begin
 
                 when others =>  
                     suspend_active_reg <= '0';
+
             end case;
         end if;
     end process;
@@ -380,8 +381,6 @@ begin
         end if;
     end process;
 
-
-
     word_counter_processing : process(CLK)
     begin
         if CLK'event AND CLK = '1' then 
@@ -419,8 +418,6 @@ begin
         end if;
     end process;
 
-
-
     m_axi_awaddr_reg_processing : process(CLK)
     begin
         if CLK'event AND CLK = '1' then 
@@ -439,7 +436,7 @@ begin
                     if (m_axi_awaddr_reg < MEM_HIGHADDR) then 
                         m_axi_awaddr_reg <= m_axi_awaddr_reg;
                     else
-                        m_axi_awaddr_reg <= (others => '0');
+                        m_axi_awaddr_reg <= MEM_STARTADDR;
                     end if;
 
                 when others => 
@@ -448,8 +445,6 @@ begin
             end case;
         end if;
     end process;
-
-
 
     current_address_processing : process(CLK)
     begin
@@ -471,8 +466,6 @@ begin
             end case;
         end if;
     end process;
-
-
 
     m_axi_awlen_reg_processing : process(CLK)
     begin
@@ -512,8 +505,6 @@ begin
         end if;
     end process;
 
-
-
     --íóæåí òîëüêî äëÿ äåêðåìåíòà ñ÷åò÷èêà ïðè çàïèñè. 
     awlen_reg_processing : process(CLK)
     begin
@@ -552,8 +543,6 @@ begin
             end case;
         end if;
     end process;
-
-
 
     m_axi_awvalid_reg_processing : process(CLK)
     begin
@@ -621,16 +610,12 @@ begin
         end if;
     end process;
 
-
-
     m_axi_bready_reg_processing : process(CLK)
     begin
         if cLK'event AND CLK = '1' then 
             m_axi_bready_reg <= '1';
         end if;
     end process;
-
-
 
     m_axi_wvalid_reg_processing : process(CLK)
     begin
@@ -699,11 +684,7 @@ begin
         end if;
     end process;   
 
-
-
     m_axi_wlast_reg <= '1' when awburst_counter = m_axi_awlen_reg and current_state = WRITE_ST else '0';
-
-
 
     awburst_counter_processing : process(CLK)
     begin
@@ -721,8 +702,6 @@ begin
             end case;
         end if;
     end process;
-
-
 
     fifo_in_sync_counted_xpm_inst : fifo_in_sync_counted_xpm
         generic map (
@@ -747,12 +726,8 @@ begin
             DATA_COUNT      =>  fifo_data_count                  
         );
 
-
-
     in_rden         <= '1' when m_axi_wvalid_reg = '1' and M_AXI_WREADY = '1' else '0';
     fifo_word_count <= EXT(fifo_data_count(31 downto C_AXSIZE_INT), 32);
-
-
 
     fifo_reset_processing : process(CLK)
     begin
@@ -772,8 +747,6 @@ begin
             end if; 
         end if;
     end process;
-
-
     -- All OK
     write_ability_processing : process(CLK)
     begin
@@ -788,8 +761,6 @@ begin
             end case;
         end if;
     end process;
-
-
 
     current_state_processing : process(CLK)
     begin
@@ -814,22 +785,26 @@ begin
                     --    end if;
 
                     when WAIT_FOR_DATA_ST => 
-                        if in_empty = '0' then 
-                            if word_counter <= conv_std_logic_Vector ( BURST_LIMIT-1, word_counter'length) then 
-                                if fifo_word_count < word_counter then 
-                                    current_state <= current_state;
+                        if has_stop_initiated = '0' then 
+                            if in_empty = '0' then 
+                                if word_counter <= conv_std_logic_Vector ( BURST_LIMIT-1, word_counter'length) then 
+                                    if fifo_word_count < word_counter then 
+                                        current_state <= current_state;
+                                    else
+                                        current_state <= WRITE_ST;
+                                    end if;
                                 else
-                                    current_state <= WRITE_ST;
+                                    if fifo_word_count < BURST_LIMIT then 
+                                        current_state <= current_state;
+                                    else
+                                        current_state <= WRITE_ST;
+                                    end if;
                                 end if;
                             else
-                                if fifo_word_count < BURST_LIMIT then 
-                                    current_state <= current_state;
-                                else
-                                    current_state <= WRITE_ST;
-                                end if;
+                                current_state <= current_state;
                             end if;
                         else
-                            current_state <= current_state;
+                            current_state <= IDLE_ST;
                         end if;
 
                     when WRITE_ST =>
@@ -885,8 +860,6 @@ begin
         end if;
     end process;
 
-
-
     has_bresp_flaq_processing : process(CLK)
     begin
         if CLK'event AND CLK = '1' then 
@@ -905,8 +878,6 @@ begin
         end if;
     end process;
 
-
-
     fifo_cmd_sync_xpm_inst : fifo_cmd_sync_xpm 
         generic map (
             DATA_WIDTH      =>  ADDR_WIDTH              ,
@@ -924,8 +895,6 @@ begin
             RDEN            =>  cmd_rden                ,
             EMPTY           =>  cmd_empty                
         );
- 
-
 
     queue_volume_reg_processing : process(CLK)
     begin
@@ -950,15 +919,9 @@ begin
         end if;
     end process;
 
-
-
     cmd_din <= current_address;
 
-
-
     cmd_rden <= FIFO_RDEN;
-
-
 
     cmd_wren_processing : process(CLK)
     begin
@@ -982,8 +945,5 @@ begin
             end case;
         end if;
     end process;
-
-
-
 
 end axi_memory_writer_func_arch;

@@ -336,7 +336,7 @@ module axi_checker #(
 
     always_ff @(posedge aclk) begin : reg_0_processing
         if (!aresetn) 
-            register[0] <= 'b0;
+            register[0] <= 32'h00000001;
         else
             if (awvalid & awready & wvalid & wready)
                 if (awaddr[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h00)
@@ -345,7 +345,7 @@ module axi_checker #(
 
     always_ff @(posedge aclk) begin : reg_1_processing
         if (!aresetn) 
-            register[1] <= 'b0;
+            register[1] <= '{default:0};
         else
             if (awvalid & awready & wvalid & wready)
                 if (awaddr[(ADDR_OPT + ADDR_LSB) : ADDR_LSB] == 'h01)

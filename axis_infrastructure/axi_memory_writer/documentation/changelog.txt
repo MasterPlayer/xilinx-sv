@@ -1,3 +1,9 @@
+v.1.3 (Rev. 5)
+    - Return from WAIT_FOR_DATA_ST to IDLE_ST without reset corrected.
+
+v.1.3 (Rev. 4)
+    - Fix Issue for awaddr: no assignment MEM_STARTADDR after PAUSE_ST
+
 v.1.3 (Rev. 3)
     - Add SUSPEND_ACTIVE flaq for indicate state when writer in PAUSE state after sending stop signal, 
     and no active AXI-Full transactions

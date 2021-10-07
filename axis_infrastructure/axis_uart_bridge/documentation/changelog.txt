@@ -1,0 +1,6 @@
+v1.0 (Rev.1)
+    * First release
+    * Support various speeds 
+    * Support various data width for AXI
+    * Support AXI-Stream
+    * No configuration

@@ -1,3 +1,6 @@
+v1.1 (Rev. 6)
+    - Set dependency for functional reset : in previous it has been independent from aresetn signal
+
 v1.1 (Rev. 5)
     - Add debug ports for control different over internal counter and AXI_WDATA
     - Remove ILA
