@@ -8,8 +8,8 @@ module axis_uart_bridge #(
     parameter QUEUE_DEPTH   = 16       ,
     parameter QUEUE_MEMTYPE = "block"    // "distributed", "auto"
 ) (
-    input                          clk          ,
-    input                          reset        ,
+    input                          aclk         ,
+    input                          aresetn      ,
     input        [(N_BYTES*8)-1:0] S_AXIS_TDATA ,
     input                          S_AXIS_TVALID,
     output logic                   S_AXIS_TREADY,
@@ -29,8 +29,8 @@ module axis_uart_bridge #(
         .QUEUE_DEPTH  (QUEUE_DEPTH  ),
         .QUEUE_MEMTYPE(QUEUE_MEMTYPE)
     ) axis_uart_bridge_rx_inst (
-        .clk          (clk          ),
-        .reset        (reset        ),
+        .clk          (aclk         ),
+        .reset        (~aresetn     ),
         .M_AXIS_TDATA (M_AXIS_TDATA ),
         .M_AXIS_TVALID(M_AXIS_TVALID),
         .M_AXIS_TREADY(M_AXIS_TREADY),
@@ -44,8 +44,8 @@ module axis_uart_bridge #(
         .QUEUE_DEPTH  (QUEUE_DEPTH  ),
         .QUEUE_MEMTYPE(QUEUE_MEMTYPE)
     ) axis_uart_bridge_tx_inst (
-        .clk          (clk          ),
-        .reset        (reset        ),
+        .clk          (aclk          ),
+        .reset        (~aresetn        ),
         .S_AXIS_TDATA (S_AXIS_TDATA ),
         .S_AXIS_TVALID(S_AXIS_TVALID),
         .S_AXIS_TREADY(S_AXIS_TREADY),
