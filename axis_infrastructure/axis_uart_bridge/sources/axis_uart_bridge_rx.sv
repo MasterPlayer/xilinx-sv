@@ -160,7 +160,7 @@ module axis_uart_bridge_rx #(
         case (current_state) 
             RECEIVE_DATA_ST : 
                 if (clock_event) begin 
-                    out_din_data <= {UART_RX, out_din_data[31:1]};
+                    out_din_data <= {UART_RX, out_din_data[(DATA_WIDTH-1):1]};
                 end 
 
             default : 

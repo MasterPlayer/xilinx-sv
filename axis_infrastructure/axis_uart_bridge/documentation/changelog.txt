@@ -1,3 +1,6 @@
+v1.0 (Rev.3)
+    * Fixed issue for rx part of uart : before this changes only 32 bit data width supported
+
 v1.0 (Rev.2)
     * Changed reset polarity to active_low
     * Changed name reset to aresetn
