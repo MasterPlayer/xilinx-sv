@@ -7,26 +7,27 @@ module axis_uart_bridge_rx #(
     parameter QUEUE_DEPTH   = 16       ,
     parameter QUEUE_MEMTYPE = "block"    // "distributed", "auto"
 ) (
-    input                          clk          ,
-    input                          reset        ,
-    output logic [(N_BYTES*8)-1:0] M_AXIS_TDATA ,
-    output logic                   M_AXIS_TVALID,
-    input                          M_AXIS_TREADY,
+    input                          clk               ,
+    input                          reset             ,
+    input                          dbg_has_data_error,
+    output logic [(N_BYTES*8)-1:0] M_AXIS_TDATA      ,
+    output logic                   M_AXIS_TVALID     ,
+    input                          M_AXIS_TREADY     ,
     input                          UART_RX
 );
 
-    localparam CLOCK_DURATION      = (FREQ_HZ/UART_SPEED);
+    localparam CLOCK_DURATION      = (FREQ_HZ/UART_SPEED)+1;
     localparam DATA_WIDTH          = (N_BYTES*8)         ;
-    localparam HALF_CLOCK_DURATION = CLOCK_DURATION/2    ;
+    localparam HALF_CLOCK_DURATION = (CLOCK_DURATION/2)+1  ;
 
     logic [DATA_WIDTH-1:0] out_din_data = '{default:0};
     logic                  out_wren     = 1'b0        ;
     logic                  out_awfull                 ;
 
-    logic [2:0] bit_index = '{default:0};
-    logic [31:0] word_counter = '{default:0};
+    logic [2:0] bit_index    = '{default:0};
+    logic [7:0] word_counter = '{default:0};
 
-    logic [31:0] clock_counter      = '{default:0};
+    logic [15:0] clock_counter      = '{default:0};
     logic        clock_event        = 1'b0        ;
     logic        d_uart_rx                        ;
 
@@ -38,11 +39,45 @@ module axis_uart_bridge_rx #(
 
     rx_fsm current_state = AWAIT_START_ST;
 
+    logic [2:0] current_state_bit;
+
+    always_comb begin
+        case (current_state)
+            AWAIT_START_ST  : current_state_bit = 3'b001;
+            RECEIVE_DATA_ST : current_state_bit = 3'b010;
+            AWAIT_STOP_ST   : current_state_bit = 3'b100;
+            default         : current_state_bit = 3'b111;
+        endcase
+    end 
+
+    ila_dbg ila_dbg_inst (
+        .clk    (clk               ), // input wire clk
+        .probe0 (dbg_has_data_error), // input wire [0:0]  probe0
+        .probe1 (out_din_data      ), // input wire [7:0]  probe1
+        .probe2 (out_wren          ), // input wire [0:0]  probe2
+        .probe3 (out_awfull        ), // input wire [0:0]  probe3
+        .probe4 (bit_index         ), // input wire [2:0]  probe4
+        .probe5 (word_counter      ), // input wire [7:0]  probe5
+        .probe6 (clock_counter     ), // input wire [15:0]  probe6
+        .probe7 (clock_event       ), // input wire [0:0]  probe7
+        .probe8 (d_uart_rx         ), // input wire [0:0]  probe8
+        .probe9 (current_state_bit ), // input wire [2:0]  probe9
+        .probe10(UART_RX           )  // input wire [2:0]  probe9
+    );
 
     always_ff @(posedge clk) begin : d_uart_rx_proc
         d_uart_rx <= UART_RX;
     end 
 
+    // if (clock_event) begin 
+    //     if (UART_RX) begin
+    //         current_state <= AWAIT_START_ST;
+    //     end else begin 
+    //         current_state <= current_state;
+    //     end 
+    // end else begin 
+    //     current_state <= current_state;
+    // end 
 
 
     always_ff @(posedge clk) begin : half_clock_counter_proc
@@ -72,7 +107,7 @@ module axis_uart_bridge_rx #(
                     if (clock_counter < (CLOCK_DURATION-1)) begin 
                         clock_counter <= clock_counter + 1;
                     end else begin 
-                        clock_counter <= '{default:0};
+                        clock_counter <= HALF_CLOCK_DURATION-1;
                     end 
 
                 default: 

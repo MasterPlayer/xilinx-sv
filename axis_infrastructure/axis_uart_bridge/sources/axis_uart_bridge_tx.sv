@@ -15,7 +15,7 @@ module axis_uart_bridge_tx #(
     output logic                   UART_TX
 );
 
-    localparam CLOCK_DURATION = (FREQ_HZ/UART_SPEED);
+    localparam CLOCK_DURATION = (FREQ_HZ/UART_SPEED)+1;
     localparam DATA_WIDTH     = (N_BYTES*8)         ;
 
     typedef enum {
@@ -44,7 +44,7 @@ module axis_uart_bridge_tx #(
 
     always_ff @(posedge clk) begin : uart_tx_proc 
         if (reset) begin 
-            UART_TX <= 1'b0;
+            UART_TX <= 1'b1;
         end else begin 
             case (current_state_tx)
                 IDLE_ST : 
