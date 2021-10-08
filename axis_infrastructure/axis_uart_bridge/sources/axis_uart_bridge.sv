@@ -20,7 +20,7 @@ module axis_uart_bridge #(
     output logic                   UART_TX
 );
 
-    localparam version = 16'h0101
+    localparam version = 16'h0101;
 
     axis_uart_bridge_rx #(
         .UART_SPEED   (UART_SPEED   ),
