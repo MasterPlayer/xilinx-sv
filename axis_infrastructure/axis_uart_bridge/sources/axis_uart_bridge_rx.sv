@@ -8,28 +8,26 @@ module axis_uart_bridge_rx #(
     parameter QUEUE_MEMTYPE = "block"    // "distributed", "auto"
 ) (
     input                          clk               ,
-    input                          reset             ,
-    input                          dbg_has_data_error,
+    input                          aresetn           ,
     output logic [(N_BYTES*8)-1:0] M_AXIS_TDATA      ,
     output logic                   M_AXIS_TVALID     ,
     input                          M_AXIS_TREADY     ,
     input                          UART_RX
 );
 
-    localparam CLOCK_DURATION      = (FREQ_HZ/UART_SPEED)+1;
+    localparam CLOCK_DURATION      = (FREQ_HZ/UART_SPEED);
     localparam DATA_WIDTH          = (N_BYTES*8)         ;
-    localparam HALF_CLOCK_DURATION = (CLOCK_DURATION/2)+1  ;
+    localparam HALF_CLOCK_DURATION = (CLOCK_DURATION/2)  ;
 
     logic [DATA_WIDTH-1:0] out_din_data = '{default:0};
     logic                  out_wren     = 1'b0        ;
     logic                  out_awfull                 ;
 
-    logic [2:0] bit_index    = '{default:0};
-    logic [7:0] word_counter = '{default:0};
-
-    logic [15:0] clock_counter      = '{default:0};
-    logic        clock_event        = 1'b0        ;
-    logic        d_uart_rx                        ;
+    logic [                       2:0] bit_index     = '{default:0};
+    logic [    $clog2(DATA_WIDTH)-1:0] word_counter  = '{default:0};
+    logic [$clog2(CLOCK_DURATION)-1:0] clock_counter = '{default:0};
+    logic                              clock_event   = 1'b0        ;
+    logic                              d_uart_rx                   ;
 
     typedef enum {
         AWAIT_START_ST,
@@ -39,59 +37,50 @@ module axis_uart_bridge_rx #(
 
     rx_fsm current_state = AWAIT_START_ST;
 
-    logic [2:0] current_state_bit;
+    // logic [2:0] current_state_bit;
 
-    always_comb begin
-        case (current_state)
-            AWAIT_START_ST  : current_state_bit = 3'b001;
-            RECEIVE_DATA_ST : current_state_bit = 3'b010;
-            AWAIT_STOP_ST   : current_state_bit = 3'b100;
-            default         : current_state_bit = 3'b111;
-        endcase
-    end 
+    // always_comb begin
+    //     case (current_state)
+    //         AWAIT_START_ST  : current_state_bit = 3'b001;
+    //         RECEIVE_DATA_ST : current_state_bit = 3'b010;
+    //         AWAIT_STOP_ST   : current_state_bit = 3'b100;
+    //         default         : current_state_bit = 3'b111;
+    //     endcase
+    // end 
 
-    ila_dbg ila_dbg_inst (
-        .clk    (clk               ), // input wire clk
-        .probe0 (dbg_has_data_error), // input wire [0:0]  probe0
-        .probe1 (out_din_data      ), // input wire [7:0]  probe1
-        .probe2 (out_wren          ), // input wire [0:0]  probe2
-        .probe3 (out_awfull        ), // input wire [0:0]  probe3
-        .probe4 (bit_index         ), // input wire [2:0]  probe4
-        .probe5 (word_counter      ), // input wire [7:0]  probe5
-        .probe6 (clock_counter     ), // input wire [15:0]  probe6
-        .probe7 (clock_event       ), // input wire [0:0]  probe7
-        .probe8 (d_uart_rx         ), // input wire [0:0]  probe8
-        .probe9 (current_state_bit ), // input wire [2:0]  probe9
-        .probe10(UART_RX           )  // input wire [2:0]  probe9
-    );
+    // ila_dbg ila_dbg_inst (
+    //     .clk    (clk               ), // input wire clk
+    //     .probe0 (dbg_has_data_error), // input wire [0:0]  probe0
+    //     .probe1 (out_din_data      ), // input wire [7:0]  probe1
+    //     .probe2 (out_wren          ), // input wire [0:0]  probe2
+    //     .probe3 (out_awfull        ), // input wire [0:0]  probe3
+    //     .probe4 (bit_index         ), // input wire [2:0]  probe4
+    //     .probe5 (word_counter      ), // input wire [7:0]  probe5
+    //     .probe6 (clock_counter     ), // input wire [15:0]  probe6
+    //     .probe7 (clock_event       ), // input wire [0:0]  probe7
+    //     .probe8 (d_uart_rx         ), // input wire [0:0]  probe8
+    //     .probe9 (current_state_bit ), // input wire [2:0]  probe9
+    //     .probe10(UART_RX           )  // input wire [2:0]  probe9
+    // );
+
+
 
     always_ff @(posedge clk) begin : d_uart_rx_proc
         d_uart_rx <= UART_RX;
     end 
 
-    // if (clock_event) begin 
-    //     if (UART_RX) begin
-    //         current_state <= AWAIT_START_ST;
-    //     end else begin 
-    //         current_state <= current_state;
-    //     end 
-    // end else begin 
-    //     current_state <= current_state;
-    // end 
 
 
     always_ff @(posedge clk) begin : half_clock_counter_proc
-        if (reset) begin 
+        if (!aresetn) begin 
             clock_counter <= HALF_CLOCK_DURATION;
         end else begin 
             case (current_state)
                 AWAIT_START_ST : 
                     if (clock_counter == HALF_CLOCK_DURATION) begin 
-                        if (~UART_RX & d_uart_rx) begin 
+                        if (!UART_RX & d_uart_rx) begin 
                             clock_counter <= clock_counter + 1;
-                        end else begin
-                            clock_counter <= clock_counter;
-                        end
+                        end 
                     end else begin 
                         clock_counter <= clock_counter + 1;
                     end 
@@ -117,73 +106,53 @@ module axis_uart_bridge_rx #(
         end 
     end 
 
+
+
     always_ff @(posedge clk) begin : clock_event_proc
-        if (clock_counter == CLOCK_DURATION-1) begin  
+        if (clock_counter == CLOCK_DURATION-1)   
             clock_event <= 1'b1;
-        end else begin 
+         else  
             clock_event <= 1'b0;
-        end 
     end
 
+
+
     always_ff @(posedge clk) begin : current_state_proc
-        if (reset) begin 
+        if (!aresetn)  
             current_state <= AWAIT_START_ST;
-        end else begin 
+        else  
             case (current_state) 
                 AWAIT_START_ST : 
-                    if (clock_event) begin 
-                        if (~UART_RX) begin // is this start?
+                    if (clock_event)  
+                        if (!UART_RX)  // is this start?
                             current_state <= RECEIVE_DATA_ST;
-                        end else begin 
-                            current_state <= current_state;
-                        end 
-                    end else begin 
-                        current_state <= current_state;
-                    end 
 
                 RECEIVE_DATA_ST : 
-                    if (clock_event) begin 
-                        if (bit_index == 7) begin 
+                    if (clock_event)
+                        if (bit_index == 'h7)
                             current_state <= AWAIT_STOP_ST;
-                        end else begin 
-                            current_state <= current_state;
-                        end 
-                    end else begin 
-                        current_state <= current_state;
-                    end 
 
                 AWAIT_STOP_ST : 
-                    if (clock_event) begin 
-                        if (UART_RX) begin
+                    if (clock_event)
+                        if (UART_RX)
                             current_state <= AWAIT_START_ST;
-                        end else begin 
-                            current_state <= current_state;
-                        end 
-                    end else begin 
-                        current_state <= current_state;
-                    end 
 
                 default        : 
                     current_state <= current_state;
             endcase
-        end 
     end
+
+
 
     always_ff @(posedge clk) begin 
         case (current_state) 
             RECEIVE_DATA_ST : 
-                if (clock_event) begin 
+                if (clock_event)
                     bit_index <= bit_index + 1;
-                end else begin 
-                    bit_index <= bit_index;
-                end 
 
             AWAIT_STOP_ST : 
-                if (clock_event) begin 
+                if (clock_event)
                     bit_index <= '{default:0};
-                end else begin 
-                    bit_index <= bit_index;
-                end 
 
             default: 
                 bit_index <= '{default:0};
@@ -191,31 +160,31 @@ module axis_uart_bridge_rx #(
         endcase
     end 
 
+
+
     always_ff @(posedge clk) begin : out_din_data_proc
         case (current_state) 
             RECEIVE_DATA_ST : 
-                if (clock_event) begin 
+                if (clock_event)
                     out_din_data <= {UART_RX, out_din_data[(DATA_WIDTH-1):1]};
-                end 
 
             default : 
                 out_din_data <= out_din_data;
         endcase // current_state
     end 
 
+
+
     // for calculation when out_wren generate
     always_ff @(posedge clk) begin : word_counter_proc
         case (current_state)
             RECEIVE_DATA_ST: 
-                if (clock_event) begin 
+                if (clock_event) 
                     if (word_counter < (DATA_WIDTH-1)) begin 
                         word_counter <= word_counter + 1;
                     end else begin 
                         word_counter <= '{default:0};
                     end 
-                end else begin 
-                    word_counter <= word_counter;
-                end 
 
             default : 
                 word_counter <= word_counter;
@@ -223,39 +192,102 @@ module axis_uart_bridge_rx #(
         endcase // current_state
     end 
 
-    fifo_out_sync_xpm #(
-        .DATA_WIDTH(DATA_WIDTH   ),
-        .MEMTYPE   (QUEUE_MEMTYPE),
-        .DEPTH     (QUEUE_DEPTH  )
-    ) fifo_out_sync_xpm_inst (
-        .CLK          (clk          ),
-        .RESET        (reset        ),
-        
-        .OUT_DIN_DATA (out_din_data ),
-        .OUT_DIN_KEEP ('b0          ),
-        .OUT_DIN_LAST ('b0          ),
-        .OUT_WREN     (out_wren     ),
-        .OUT_FULL     (             ),
-        .OUT_AWFULL   (out_awfull   ),
-        
-        .M_AXIS_TDATA (M_AXIS_TDATA ),
-        .M_AXIS_TKEEP (             ),
-        .M_AXIS_TVALID(M_AXIS_TVALID),
-        .M_AXIS_TLAST (             ),
-        .M_AXIS_TREADY(M_AXIS_TREADY)
-    );
 
-    always_ff @ (posedge clk) begin : out_wren_proc 
-        if (clock_event) begin 
-            if (word_counter == (DATA_WIDTH-1)) begin 
-                out_wren <= 1'b1;
-            end else begin 
-                out_wren <= 1'b0;
+    generate
+        if (QUEUE_DEPTH == 0) begin : GEN_NO_DEPTH 
+
+            always_comb begin : m_axis_tdata_processing
+                M_AXIS_TDATA  = out_din_data;
             end 
-        end else begin 
-            out_wren <= 1'b0;
+
+            always_comb begin : m_axis_tvalid_processing 
+                M_AXIS_TVALID = out_wren;
+            end 
+
         end 
-    end 
+    endgenerate
+
+
+    generate 
+        if (QUEUE_DEPTH > 0 & QUEUE_DEPTH < 16) begin : GEN_QUEUE_ACTIVE_MIN_DEPTH
+        
+            fifo_out_sync_xpm #(
+                .DATA_WIDTH(DATA_WIDTH   ),
+                .MEMTYPE   (QUEUE_MEMTYPE),
+                .DEPTH     (16  )
+            ) fifo_out_sync_xpm_inst (
+                .CLK          (clk          ),
+                .RESET        (!aresetn     ),
+                
+                .OUT_DIN_DATA (out_din_data ),
+                .OUT_DIN_KEEP ('b0          ),
+                .OUT_DIN_LAST ('b0          ),
+                .OUT_WREN     (out_wren     ),
+                .OUT_FULL     (             ),
+                .OUT_AWFULL   (out_awfull   ),
+                
+                .M_AXIS_TDATA (M_AXIS_TDATA ),
+                .M_AXIS_TKEEP (             ),
+                .M_AXIS_TVALID(M_AXIS_TVALID),
+                .M_AXIS_TLAST (             ),
+                .M_AXIS_TREADY(M_AXIS_TREADY)
+            );
+
+            always_ff @ (posedge clk) begin : out_wren_proc 
+                if (clock_event) begin 
+                    if (word_counter == (DATA_WIDTH-1)) begin 
+                        out_wren <= 1'b1;
+                    end else begin 
+                        out_wren <= 1'b0;
+                    end 
+                end else begin 
+                    out_wren <= 1'b0;
+                end 
+            end 
+
+        end 
+    endgenerate
+
+    generate
+        if (QUEUE_DEPTH >= 16) begin : GEN_QUEUE_ACTIVE_USER_DEPTH
+
+            fifo_out_sync_xpm #(
+                .DATA_WIDTH(DATA_WIDTH   ),
+                .MEMTYPE   (QUEUE_MEMTYPE),
+                .DEPTH     (QUEUE_DEPTH  )
+            ) fifo_out_sync_xpm_inst (
+                .CLK          (clk          ),
+                .RESET        (!aresetn     ),
+                
+                .OUT_DIN_DATA (out_din_data ),
+                .OUT_DIN_KEEP ('b0          ),
+                .OUT_DIN_LAST ('b0          ),
+                .OUT_WREN     (out_wren     ),
+                .OUT_FULL     (             ),
+                .OUT_AWFULL   (out_awfull   ),
+                
+                .M_AXIS_TDATA (M_AXIS_TDATA ),
+                .M_AXIS_TKEEP (             ),
+                .M_AXIS_TVALID(M_AXIS_TVALID),
+                .M_AXIS_TLAST (             ),
+                .M_AXIS_TREADY(M_AXIS_TREADY)
+            );
+
+            always_ff @ (posedge clk) begin : out_wren_proc 
+                if (clock_event) begin 
+                    if (word_counter == (DATA_WIDTH-1)) begin 
+                        out_wren <= 1'b1;
+                    end else begin 
+                        out_wren <= 1'b0;
+                    end 
+                end else begin 
+                    out_wren <= 1'b0;
+                end 
+            end 
+        
+        end 
+    endgenerate
+
 
 
 

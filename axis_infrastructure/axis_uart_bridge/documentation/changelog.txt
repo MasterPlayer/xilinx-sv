@@ -1,3 +1,13 @@
+v1.1 (Rev.1)
+    * optimized vector widths 
+    * fixed clock duration counting
+    * Fixed issue with starting receive
+    * Add various modes for using/unusing output fifo
+    * Changed polarity for rx part
+
+v1.0 (Rev.4)
+    * Fixed reset subsystem
+
 v1.0 (Rev.3)
     * Fixed issue for rx part of uart : before this changes only 32 bit data width supported
 
