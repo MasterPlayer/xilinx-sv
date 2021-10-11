@@ -5,7 +5,8 @@ module axis_uart_bridge_rx #(
     parameter FREQ_HZ       = 100000000,
     parameter N_BYTES       = 32       ,
     parameter QUEUE_DEPTH   = 16       ,
-    parameter QUEUE_MEMTYPE = "block"    // "distributed", "auto"
+    parameter QUEUE_MEMTYPE = "block"  ,
+    parameter REGISTER_LEN  = 1  // "distributed", "auto"
 ) (
     input                          clk               ,
     input                          aresetn           ,
@@ -23,11 +24,11 @@ module axis_uart_bridge_rx #(
     logic                  out_wren     = 1'b0        ;
     logic                  out_awfull                 ;
 
-    logic [                       2:0] bit_index     = '{default:0};
-    logic [    $clog2(DATA_WIDTH)-1:0] word_counter  = '{default:0};
-    logic [$clog2(CLOCK_DURATION)-1:0] clock_counter = '{default:0};
-    logic                              clock_event   = 1'b0        ;
-    logic                              d_uart_rx                   ;
+    logic [                       2:0] bit_index          = '{default:0};
+    logic [    $clog2(DATA_WIDTH)-1:0] word_counter       = '{default:0};
+    logic [$clog2(CLOCK_DURATION)-1:0] clock_counter      = '{default:0};
+    logic                              clock_event        = 1'b0        ;
+    logic                              d_internal_uart_rx               ;
 
     typedef enum {
         AWAIT_START_ST,
@@ -63,10 +64,56 @@ module axis_uart_bridge_rx #(
     //     .probe10(UART_RX           )  // input wire [2:0]  probe9
     // );
 
+    logic internal_uart_rx;
+
+    generate 
+        if (REGISTER_LEN > 1) begin : GEN_REGISTERED_INPUT 
+            logic [REGISTER_LEN-1:0] registered_uart_rx;
+
+            always_ff @(posedge clk) begin
+                registered_uart_rx <= {registered_uart_rx[REGISTER_LEN-2:0], UART_RX};
+            end 
+
+            always_comb begin 
+                internal_uart_rx = registered_uart_rx[REGISTER_LEN-1];
+            end 
+
+        end 
+    endgenerate 
+
+
+
+    generate 
+        if (REGISTER_LEN == 1) begin : GEN_REGISTERED_SINGLE_INPUT 
+            logic [REGISTER_LEN-1:0] registered_uart_rx;
+
+            always_ff @(posedge clk) begin
+                registered_uart_rx <= UART_RX;
+            end 
+
+            always_comb begin 
+                internal_uart_rx = registered_uart_rx[REGISTER_LEN-1];
+            end 
+            
+        end 
+    endgenerate 
+
+
+
+    generate 
+        if (REGISTER_LEN == 0) begin : GEN_NO_REGISTERED_INPUT 
+            
+            always_comb begin 
+                internal_uart_rx = UART_RX;
+            end 
+
+        end 
+    endgenerate
+        
 
 
     always_ff @(posedge clk) begin : d_uart_rx_proc
-        d_uart_rx <= UART_RX;
+        d_internal_uart_rx <= internal_uart_rx;
     end 
 
 
@@ -78,7 +125,7 @@ module axis_uart_bridge_rx #(
             case (current_state)
                 AWAIT_START_ST : 
                     if (clock_counter == HALF_CLOCK_DURATION) begin 
-                        if (!UART_RX & d_uart_rx) begin 
+                        if (!internal_uart_rx & d_internal_uart_rx) begin 
                             clock_counter <= clock_counter + 1;
                         end 
                     end else begin 
@@ -124,7 +171,7 @@ module axis_uart_bridge_rx #(
             case (current_state) 
                 AWAIT_START_ST : 
                     if (clock_event)  
-                        if (!UART_RX)  // is this start?
+                        if (!internal_uart_rx)  // is this start?
                             current_state <= RECEIVE_DATA_ST;
 
                 RECEIVE_DATA_ST : 
@@ -134,7 +181,7 @@ module axis_uart_bridge_rx #(
 
                 AWAIT_STOP_ST : 
                     if (clock_event)
-                        if (UART_RX)
+                        if (internal_uart_rx)
                             current_state <= AWAIT_START_ST;
 
                 default        : 
@@ -166,7 +213,7 @@ module axis_uart_bridge_rx #(
         case (current_state) 
             RECEIVE_DATA_ST : 
                 if (clock_event)
-                    out_din_data <= {UART_RX, out_din_data[(DATA_WIDTH-1):1]};
+                    out_din_data <= {internal_uart_rx, out_din_data[(DATA_WIDTH-1):1]};
 
             default : 
                 out_din_data <= out_din_data;

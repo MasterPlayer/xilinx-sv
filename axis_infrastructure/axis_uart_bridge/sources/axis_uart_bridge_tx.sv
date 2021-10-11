@@ -5,7 +5,8 @@ module axis_uart_bridge_tx #(
     parameter FREQ_HZ       = 100000000,
     parameter N_BYTES       = 32       ,
     parameter QUEUE_DEPTH   = 16       ,
-    parameter QUEUE_MEMTYPE = "block"    // "distributed", "auto"
+    parameter QUEUE_MEMTYPE = "block"  ,  // "distributed", "auto"
+    parameter REGISTER_LEN  = 1
 ) (
     input                          clk          ,
     input                          reset        ,
@@ -42,57 +43,92 @@ module axis_uart_bridge_tx #(
     logic [ 2:0] data_bit_counter = '{default:0};
     logic [31:0] byte_counter     = '{default:0};
 
+    logic internal_uart_tx;
+
+    generate 
+        if (REGISTER_LEN == 0) begin : GEN_UNREGISTERED_OUTPUT
+            always_comb begin 
+                UART_TX = internal_uart_tx;
+            end 
+        end 
+    endgenerate
+
+    generate 
+        if (REGISTER_LEN > 1) begin : GEN_REGISTERED_OUTPUT     
+
+            logic [REGISTER_LEN-1:0] registered_uart_tx;
+
+            always_ff @(posedge clk) begin 
+                registered_uart_tx <= {registered_uart_tx[REGISTER_LEN-2:0], internal_uart_tx};
+            end 
+
+            always_comb begin 
+                UART_TX = registered_uart_tx[REGISTER_LEN-1];
+            end 
+
+        end 
+    endgenerate
+
+    generate 
+        if (REGISTER_LEN == 1) begin
+            always_ff @(posedge clk) begin 
+                UART_TX <= internal_uart_tx;
+            end 
+        end 
+    endgenerate
+
+
     always_ff @(posedge clk) begin : uart_tx_proc 
         if (reset) begin 
-            UART_TX <= 1'b1;
+            internal_uart_tx <= 1'b1;
         end else begin 
             case (current_state_tx)
                 IDLE_ST : 
                     if (clock_event) begin 
                         if (~in_empty) begin 
-                            UART_TX <= 1'b0;
+                            internal_uart_tx <= 1'b0;
                         end else begin 
-                            UART_TX <= 1'b1;
+                            internal_uart_tx <= 1'b1;
                         end 
                     end else begin 
-                        UART_TX <= UART_TX;
+                        internal_uart_tx <= internal_uart_tx;
                     end 
 
                 START_ST : 
                     if (clock_event) begin 
-                        UART_TX <= in_dout_data_shift[0];
+                        internal_uart_tx <= in_dout_data_shift[0];
                     end else begin 
-                        UART_TX <= UART_TX;
+                        internal_uart_tx <= internal_uart_tx;
                     end 
 
                 DATA_ST : 
                     if (clock_event) begin 
                         if (data_bit_counter == 7) begin 
-                            UART_TX <= 1'b1;
+                            internal_uart_tx <= 1'b1;
                         end else begin 
-                            UART_TX <= in_dout_data_shift[0];
+                            internal_uart_tx <= in_dout_data_shift[0];
                         end 
                     end else begin 
-                        UART_TX <= UART_TX;
+                        internal_uart_tx <= internal_uart_tx;
                     end 
 
                 STOP_ST: 
                     if (clock_event) begin 
                         if (byte_counter == N_BYTES) begin
                             if (~in_empty) begin 
-                                UART_TX <= 1'b0;
+                                internal_uart_tx <= 1'b0;
                             end else begin  
-                                UART_TX <= 1'b1; // если в очереди еще есть данные
+                                internal_uart_tx <= 1'b1; // если в очереди еще есть данные
                             end 
                         end else begin 
-                            UART_TX <= 1'b0;
+                            internal_uart_tx <= 1'b0;
                         end 
                     end else begin 
-                        UART_TX <= UART_TX;
+                        internal_uart_tx <= internal_uart_tx;
                     end 
 
                 default : 
-                    UART_TX <= 1'b1;
+                    internal_uart_tx <= 1'b1;
 
             endcase // current_state_tx
         end 

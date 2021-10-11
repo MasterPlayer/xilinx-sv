@@ -1,3 +1,7 @@
+v1.1 (Rev.2)
+    * Add registered input as option
+    * Add registered output as option
+
 v1.1 (Rev.1)
     * optimized vector widths 
     * fixed clock duration counting
