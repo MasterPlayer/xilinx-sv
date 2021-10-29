@@ -6,9 +6,9 @@ module axis_uart_bridge #(
     parameter FREQ_HZ              = 100000000,
     parameter N_BYTES              = 32       ,
     parameter QUEUE_DEPTH          = 32       ,
-    parameter QUEUE_MEMTYPE        = "block"  , // "distributed", "auto"
+    parameter QUEUE_MEMTYPE        = "auto"   , // "distributed", "auto"
     parameter UART_TX_REGISTER_LEN = 1        ,
-    parameter UART_RX_REGISTER_LEN = 1        
+    parameter UART_RX_REGISTER_LEN = 1
 ) (
     input                          aclk         ,
     input                          aresetn      ,
@@ -22,7 +22,62 @@ module axis_uart_bridge #(
     output logic                   UART_TX
 );
 
-    localparam version = 16'h0102;
+    localparam version = 16'h0103;
+
+    initial begin : drc_check
+        reg drc_error;
+        drc_error = 0;
+
+        if (FREQ_HZ < UART_SPEED*4) begin
+            $error("[%s %0d-%0d] Clock frequency cannot been less than UART_SPEED*4 %m", "AXIS_UART_BRIDGE", 1, 1);
+            drc_error = 1;
+        end 
+
+        if (FREQ_HZ == 0) begin
+            $error("[%s %0d-%0d] CLK frequency cannot been equal 0 %m", "AXIS_UART_BRIDGE", 1, 2);
+            drc_error = 1;
+        end 
+
+        if (UART_SPEED == 0) begin
+            $error("[%s %0d-%0d] UART speed cannot been equal 0 %m", "AXIS_UART_BRIDGE", 1, 3);
+            drc_error = 1;
+        end 
+
+        if (QUEUE_MEMTYPE != "block") begin 
+            if (QUEUE_MEMTYPE != "distributed") begin 
+                if (QUEUE_MEMTYPE != "auto") begin 
+                    if (QUEUE_MEMTYPE != "ultra") begin 
+                        $error("[%s %0d-%0d] Memory type <%s> is not supported %m", "AXIS_UART_BRIDGE", 1, 4, QUEUE_MEMTYPE);
+                        drc_error = 1;
+                    end 
+                end 
+            end
+        end 
+
+        if (UART_TX_REGISTER_LEN < 0) begin
+            $error("[%s %0d-%0d] TX register length <%d> is not specified for this unit  %m", "AXIS_UART_BRIDGE", 1, 5);
+            drc_error = 1;
+        end 
+
+        if (UART_RX_REGISTER_LEN < 0) begin
+            $error("[%s %0d-%0d] RX register length %d is not specified for this unit  %m", "AXIS_UART_BRIDGE", 1, 6);
+            drc_error = 1;
+        end 
+
+        if (N_BYTES == 0) begin
+            $error("[%s %0d-%0d] Number %d of bytes in data bus cannot used  %m", "AXIS_UART_BRIDGE", 1, 7, N_BYTES);
+            drc_error = 1;
+        end 
+
+        if (QUEUE_DEPTH < 0) begin
+            $error("[%s %0d-%0d] Queue depth %d cannot used  %m", "AXIS_UART_BRIDGE", 1, 7, QUEUE_DEPTH);
+            drc_error = 1;
+        end 
+
+        if (drc_error)
+            #1 $finish;
+
+    end 
 
 
     axis_uart_bridge_rx #(

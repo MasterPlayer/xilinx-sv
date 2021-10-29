@@ -16,7 +16,7 @@ module axis_uart_bridge_tx #(
     output logic                   UART_TX
 );
 
-    localparam CLOCK_DURATION = (FREQ_HZ/UART_SPEED)+1;
+    localparam CLOCK_DURATION = (FREQ_HZ/UART_SPEED);
     localparam DATA_WIDTH     = (N_BYTES*8)         ;
 
     typedef enum {
@@ -269,7 +269,6 @@ module axis_uart_bridge_tx #(
             endcase // current_state_tx
         end 
     end 
-
 
     fifo_in_sync_xpm #(
         .DATA_WIDTH(DATA_WIDTH   ),
