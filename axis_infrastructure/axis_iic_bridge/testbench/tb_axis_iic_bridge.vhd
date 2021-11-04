@@ -12,7 +12,7 @@ architecture tb_axis_iic_bridge_arch of tb_axis_iic_bridge is
 
     constant N_BYTES        :           integer     := 4                                    ;
     constant CLK_PERIOD     :           integer     := 100000000                            ;
-    constant CLK_I2C_PERIOD :           integer     := 25000000                             ;
+    constant CLK_I2C_PERIOD :           integer     := 100000000                            ;
 
 
     component axis_iic_bridge 
@@ -23,16 +23,14 @@ architecture tb_axis_iic_bridge_arch of tb_axis_iic_bridge is
         ); 
         port (
             CLK             :   in      std_Logic                                           ;
-            reset           :   in      std_Logic                                           ;
+            resetn          :   in      std_Logic                                           ;
             s_axis_tdata    :   in      std_logic_Vector ( ((N_BYTES*8)-1) downto 0 )       ;
             s_axis_tkeep    :   in      std_logic_Vector (       N_BYTES-1 downto 0 )       ;
-            s_axis_tuser    :   in      std_logic_Vector ( 7 downto 0 )                     ;
             s_axis_tvalid   :   in      std_Logic                                           ;
             s_axis_tready   :   out     std_Logic                                           ;
             s_axis_tlast    :   in      std_Logic                                           ;
             m_axis_tdata    :   out     std_logic_Vector ( ((N_BYTES*8)-1) downto 0 )       ;
             m_axis_tkeep    :   out     std_logic_Vector (       N_BYTES-1 downto 0 )       ;
-            m_axis_tuser    :   out     std_logic_Vector ( 7 downto 0 )                     ;
             m_axis_tvalid   :   out     std_Logic                                           ;
             m_axis_tready   :   in      std_Logic                                           ;
             m_axis_tlast    :   out     std_Logic                                           ;
@@ -48,13 +46,11 @@ architecture tb_axis_iic_bridge_arch of tb_axis_iic_bridge is
     signal  reset           :           std_Logic                                     := '0'                ;
     signal  s_axis_tdata    :           std_logic_Vector ( ((N_BYTES*8)-1) downto 0 ) := (others => '0')    ;
     signal  s_axis_tkeep    :           std_logic_Vector (       N_BYTES-1 downto 0 ) := (others => '0')    ;
-    signal  s_axis_tuser    :           std_Logic_Vector (               7 downto 0 ) := (others => '0')    ;
     signal  s_axis_tvalid   :           std_Logic                                     := '0'                ;
     signal  s_axis_tready   :           std_Logic                                                           ;
     signal  s_axis_tlast    :           std_Logic                                                           ;
     signal  m_axis_tdata    :           std_logic_Vector ( ((N_BYTES*8)-1) downto 0 )                       ;
     signal  m_axis_tkeep    :           std_logic_Vector (       N_BYTES-1 downto 0 )                       ;
-    signal  m_axis_tuser    :           std_Logic_Vector (               7 downto 0 )                       ;
     signal  m_axis_tvalid   :           std_Logic                                                           ;
     signal  m_axis_tready   :           std_Logic                                     := '0'                ;
     signal  m_axis_tlast    :           std_Logic                                                           ;
@@ -88,16 +84,14 @@ begin
         )
         port map  (
             CLK             =>  CLK                             ,
-            reset           =>  reset                           ,
+            resetn          =>  not(reset)                      ,
             s_axis_tdata    =>  s_axis_tdata                    ,
-            s_axis_tuser    =>  s_axis_tuser                    ,
             s_axis_tkeep    =>  s_axis_tkeep                    ,
             s_axis_tvalid   =>  s_axis_tvalid                   ,
             s_axis_tready   =>  s_axis_tready                   ,
             s_axis_tlast    =>  s_axis_tlast                    ,
             m_axis_tdata    =>  m_axis_tdata                    ,
             m_axis_tkeep    =>  m_axis_tkeep                    ,
-            m_axis_tuser    =>  m_axis_tuser                    ,
             m_axis_tvalid   =>  m_axis_tvalid                   ,
             m_axis_tready   =>  m_axis_tready                   ,
             m_axis_tlast    =>  m_axis_tlast                    ,
@@ -107,17 +101,5 @@ begin
             sda_t           =>  sda_t                            
         );
 
-
-
-    s_axis_processing : process(CLK)
-    begin
-        if CLK'event AND CLK = '1' then 
-            case i is
-                when 100 => S_AXIS_TDATA <= x"03020100"; S_AXIS_TUSER <= x"A6"; S_AXIS_TKEEP <= x"F"; S_AXIS_TVALID <= '1'; S_AXIS_TLAST <= '0';
-                when 101 => S_AXIS_TDATA <= x"03020100"; S_AXIS_TUSER <= x"A6"; S_AXIS_TKEEP <= x"F"; S_AXIS_TVALID <= '1'; S_AXIS_TLAST <= '0';                
-                when others => S_AXIS_TDATA <= S_AXIS_TDATA; S_AXIS_TUSER <= S_AXIS_TUSER; S_AXIS_TKEEP <= S_AXIS_TKEEP; S_AXIS_TVALID <= '0'; S_AXIS_TLAST <= S_AXIS_TLAST;
-            end case;
-        end if;
-    end process;
 
 end architecture;

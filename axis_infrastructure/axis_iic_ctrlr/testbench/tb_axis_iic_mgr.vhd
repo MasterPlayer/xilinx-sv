@@ -20,6 +20,32 @@ architecture Behavioral of tb_axis_iic_mgr is
 
     constant N_BYTES : integer := 4     ;
 
+    component axis_adxl_requester
+        port(
+            clk             :   in      std_logic                           ;
+            resetn          :   in      std_logic                           ;
+            request_accel   :   in      std_logic                           ;
+            x_pos           :   out     std_logic_vector ( 15 downto 0 )    ;
+            y_pos           :   out     std_logic_vector ( 15 downto 0 )    ;
+            z_pos           :   out     std_logic_vector ( 15 downto 0 )    ;
+            s_axis_tdata    :   in      std_logic_vector ( 31 downto 0 )    ;
+            s_axis_tdest    :   in      std_logic_vector (  7 downto 0 )    ;
+            s_axis_tvalid   :   in      std_logic                           ;
+            s_axis_tlast    :   in      std_logic                           ;
+            m_axis_tdata    :   out     std_logic_vector ( 31 downto 0 )    ;
+            m_axis_tkeep    :   out     std_logic_vector (  3 downto 0 )    ;
+            m_axis_tdest    :   out     std_logic_vector (  7 downto 0 )    ;
+            m_axis_tvalid   :   out     std_logic                           ;
+            m_axis_tready   :   in      std_logic                           ;
+            m_axis_tlast    :   out     std_logic                           
+        );
+    end component;
+
+    signal  request_accel   :           std_logic                        := '0'     ;
+    signal  x_pos           :           std_logic_vector ( 15 downto 0 )            ;
+    signal  y_pos           :           std_logic_vector ( 15 downto 0 )            ;
+    signal  z_pos           :           std_logic_vector ( 15 downto 0 )            ;
+
 
     component axis_iic_ctrlr 
         generic (
@@ -91,6 +117,25 @@ begin
 
     resetn <= '0' when i < 800 else '1';
 
+    axis_adxl_requester_inst : axis_adxl_requester
+        port map (
+            clk             =>  clk             ,
+            resetn          =>  resetn          ,
+            request_accel   =>  request_accel   ,
+            x_pos           =>  x_pos           ,
+            y_pos           =>  y_pos           ,
+            z_pos           =>  z_pos           ,
+            s_axis_tdata    =>  m_axis_tdata    ,
+            s_axis_tdest    =>  m_axis_tdest    ,
+            s_axis_tvalid   =>  m_axis_tvalid   ,
+            s_axis_tlast    =>  m_axis_tlast    ,
+            m_axis_tdata    =>  s_axis_tdata    ,
+            m_axis_tkeep    =>  s_axis_tkeep    ,
+            m_axis_tdest    =>  s_axis_tdest    ,
+            m_axis_tvalid   =>  s_axis_tvalid   ,
+            m_axis_tready   =>  s_axis_tready   ,
+            m_axis_tlast    =>  s_axis_tlast     
+        );
 
     axis_iic_ctrlr_inst : axis_iic_ctrlr 
         generic map (
@@ -220,7 +265,31 @@ begin
 
     SCL_I <= SCL_T;
 
+    request_accel_processing : process(CLK)
+    begin
+        if CLK'event AND CLK = '1' then 
+            case i is 
+                when 1000 => request_accel <= '1';
+                when others => request_accel <= '0';
 
+            end case;
+        end if;
+    end process;
+
+    --s_axis_processing : process(CLK)
+    --begin
+    --    if CLK'event aND CLK = '1' then 
+    --        case i is 
+    --            when 1000   => s_axis_tdata <= x"00000006"; s_axis_tkeep <= x"F"; s_axis_tdest <= x"A7"; s_axis_tvalid <= '1'; s_axis_tlast <= '1';
+    --            when 20000  => s_axis_tdata <= x"00000004"; s_axis_tkeep <= x"F"; s_axis_tdest <= x"31"; s_axis_tvalid <= '1'; s_axis_tlast <= '1';
+    --            when 40000  => s_axis_tdata <= x"00000001"; s_axis_tkeep <= x"F"; s_axis_tdest <= x"57"; s_axis_tvalid <= '1'; s_axis_tlast <= '1';
+
+    --            --when 1001   => s_axis_tdata <= x"04030201"; s_axis_tkeep <= x"1"; s_axis_tdest <= x"A6"; s_axis_tvalid <= '1'; s_axis_tlast <= '1';
+    --            --when 1011   => s_axis_tdata <= x"08070605"; s_axis_tkeep <= x"F"; s_axis_tdest <= x"A6"; s_axis_tvalid <= '1'; s_axis_tlast <= '1';
+    --            when others => s_axis_tdata <= s_axis_tdata; s_axis_tkeep <= s_axis_tkeep; s_axis_tvalid <= '0'; s_axis_tlast <= s_axis_tlast; 
+    --        end case;   
+    --    end if;
+    --end process;
 
 end Behavioral;
 
