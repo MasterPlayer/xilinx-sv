@@ -26,34 +26,208 @@ module axis_iic_bridge #(
     output logic                     sda_t
 );
 
-    
-    localparam TEMP_DURATION = (CLK_PERIOD/CLK_I2C_PERIOD);
 
-    logic [$clog2(TEMP_DURATION)-1:0] temp_duration_cnt = '{default:0};
-    logic [$clog2(TEMP_DURATION)-1:0] temp_duration_cnt_shifted = '{default:0};
+    localparam DURATION_     = (CLK_PERIOD/CLK_I2C_PERIOD);
+    localparam DURATION_DIV2 = ((DURATION_)/2)-1          ;
+    localparam DURATION_DIV4 = ((DURATION_)/4)            ;
+
+    logic [$clog2(DURATION_)-1:0] duration_cnt_         = '{default:0};
+    logic [$clog2(DURATION_)-1:0] duration_cnt_shifted_ = '{default:0};
+    logic                         event_                = 1'b0        ;
+    logic                         allow_counting_       = 1'b0        ;
+    logic                         clk_assert_           = 1'b0        ;
+    logic                         clk_deassert_         = 1'b0        ;
+    logic [                  7:0] i2c_address_          = '{default:0};
+    logic [2:0] bit_cnt_ = '{default:0};
+
+
+    logic scl_ = 1'b1;
+    logic sda_ = 1'b1;
 
     always_ff @(posedge clk) begin 
-        if (temp_duration_cnt < TEMP_DURATION-1) 
-            temp_duration_cnt <= temp_duration_cnt + 1;
+        if (duration_cnt_ < (DURATION_-1)) 
+            duration_cnt_ <= duration_cnt_ + 1;
         else 
-            temp_duration_cnt <= '{default:0};
-    end 
-
-    logic allow_counting = 1'b0;
-
-    always_ff @(posedge clk) begin 
-        if (temp_duration_cnt == (TEMP_DURATION-1)/4)
-            allow_counting <= 1'b1;
+            duration_cnt_ <= '{default:0};
     end 
 
     always_ff @(posedge clk) begin 
-        if (allow_counting) 
-            if (temp_duration_cnt_shifted < TEMP_DURATION-1) begin 
-                temp_duration_cnt_shifted <= temp_duration_cnt_shifted + 1;
+        if (duration_cnt_ == (DURATION_DIV4))
+            allow_counting_ <= 1'b1;
+    end 
+
+    always_ff @(posedge clk) begin 
+        if (allow_counting_) 
+            if (duration_cnt_shifted_ < (DURATION_-1)) begin 
+                duration_cnt_shifted_ <= duration_cnt_shifted_ + 1;
             end else begin 
-                temp_duration_cnt_shifted <= '{default:0};
+                duration_cnt_shifted_ <= '{default:0};
             end 
     end 
+
+    always_ff @(posedge clk) begin 
+        if (duration_cnt_ == (DURATION_-1)) 
+            event_ <= 1'b1;
+        else 
+            event_ <= 1'b0;
+    end 
+
+    always_ff @(posedge clk) begin 
+        if (duration_cnt_shifted_ == (DURATION_DIV2)) 
+            clk_deassert_ <= 1'b1;
+        else 
+            clk_deassert_ <= 1'b0;
+    end 
+
+    always_ff @(posedge clk) begin 
+        if (duration_cnt_shifted_ == (DURATION_-1)) 
+            clk_assert_ <= 1'b1;
+        else 
+            clk_assert_ <= 1'b0;
+    end 
+
+    always_ff @(posedge clk) begin 
+        // if (duration_cnt_shifted_ == (DURATION_-1))
+        //     scl_ <= 1'b1;
+        // else if (duration_cnt_shifted_ == DURATION_DIV2) 
+        //     scl_ <= 1'b0;
+
+        case (current_state_) 
+            IDLE_ST_ : 
+                scl_ <= 1'b1;
+
+            START_ST_ : 
+                if (clk_assert_) 
+                    scl_ <= 1'b0;
+
+                // if (duration_cnt_shifted_ == (DURATION_-1))
+                //     scl_ <= 1'b1;
+                // else if (duration_cnt_shifted_ == DURATION_DIV2) 
+                //     scl_ <= 1'b0;
+
+            TX_ADDR_ST_: 
+                if (duration_cnt_shifted_ == (DURATION_-1))
+                    scl_ <= 1'b1;
+                else if (duration_cnt_shifted_ == DURATION_DIV2) 
+                    scl_ <= 1'b0;
+
+            STOP_ST_ : 
+                if (clk_assert_)
+                    scl_ <= 1'b1;
+                // if (duration_cnt_shifted_ == (DURATION_-1))
+                //     scl_ <= 1'b1;
+                // else if (duration_cnt_shifted_ == DURATION_DIV2) 
+                //     scl_ <= 1'b0;
+
+
+            default : 
+                scl_ <= 1'b1;
+        endcase // current_state_
+
+    end 
+
+    always_ff @(posedge clk) begin 
+        if (event_) begin 
+            case (current_state_)
+                IDLE_ST_ : 
+                    if (!in_empty) 
+                        sda_ <= 1'b0;
+                    else 
+                        sda_ <= 1'b1;
+
+                START_ST_ : 
+                    sda_ <= i2c_address_[7];
+
+                TX_ADDR_ST_ : 
+                    sda_ <= i2c_address_[7];
+
+                default : 
+                    sda_ <= 1'b1;
+
+            endcase
+        end 
+    end 
+
+    typedef enum {
+        IDLE_ST_,
+        START_ST_,
+        TX_ADDR_ST_,
+        STOP_ST_,
+        STUB_ST_
+    } fsm_;
+
+    fsm_ current_state_ = IDLE_ST_;
+
+    always_ff @(posedge clk) begin 
+        if (reset) begin 
+            current_state_ <= IDLE_ST_;
+        end else begin 
+
+            if (event_) begin 
+                case (current_state_)
+                    IDLE_ST_ : 
+                        if (!in_empty) 
+                            current_state_ <= START_ST_;
+
+                    START_ST_ : 
+                        current_state_ <= TX_ADDR_ST_;
+
+                    TX_ADDR_ST_ : 
+                        if (!bit_cnt_) 
+                            current_state_ <= STOP_ST_;
+
+                    STOP_ST_ :
+                        current_state_ <= STUB_ST_;
+
+                    default: 
+                        current_state_ <= current_state_;
+                endcase 
+            end else begin 
+                current_state_ <= current_state_;
+            end 
+        end 
+    end 
+
+    always_ff @(posedge clk) begin
+        if (event_)
+            case (current_state_) 
+                IDLE_ST_ : 
+                    i2c_address_ <= in_dout_user;
+
+                START_ST_ : 
+                    i2c_address_ <= {i2c_address_[6:0], 1'b0};
+                
+                TX_ADDR_ST_ : 
+                    i2c_address_ <= {i2c_address_[6:0], 1'b0};
+
+                default: 
+                    i2c_address_ <= i2c_address_;
+            endcase
+    end
+
+    always_ff @(posedge clk) begin 
+        if (event_) begin 
+            case (current_state_) 
+
+                TX_ADDR_ST_ : 
+                    bit_cnt_ <= bit_cnt_ - 1;
+
+                default : 
+                    bit_cnt_ <= 7;
+            endcase // current_state
+        end 
+    end 
+
+
+
+
+
+
+
+
+
+
+
 
 
     /*Limit for counter for I2C CLK counter*/
@@ -62,9 +236,9 @@ module axis_iic_bridge #(
     localparam DATA_WIDTH = (N_BYTES*8); 
 
     /*Clock counter for create i2C CLK*/
-    logic [$clog2(DURATION):0] clock_counter         = '{default:0};
-    logic [$clog2(DURATION):0] clock_counter_shifted = '{default:0};
-    logic clock_counter_allow_flaq = 1'b0;
+    logic [$clog2(DURATION):0] clock_counter            = '{default:0};
+    logic [$clog2(DURATION):0] clock_counter_shifted    = '{default:0};
+    logic                      clock_counter_allow_flaq = 1'b0        ;
 
 
     logic internal_i2c_clk   = 1'b0;
@@ -285,13 +459,13 @@ module axis_iic_bridge #(
         .IN_EMPTY     (in_empty     )
     );
 
-    /*Read Enable signal for input fifo*/
-    always_ff @(posedge clk) begin : in_rden_processing
-        case (current_state) 
-            STUB_ST : in_rden <= 1'b1;
-            default : in_rden <= 1'b0;
-        endcase
-    end 
+    // /*Read Enable signal for input fifo*/
+    // always_ff @(posedge clk) begin : in_rden_processing
+    //     case (current_state) 
+    //         STUB_ST : in_rden <= 1'b1;
+    //         default : in_rden <= 1'b0;
+    //     endcase
+    // end 
 
 
 
