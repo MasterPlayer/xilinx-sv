@@ -27,6 +27,34 @@ module axis_iic_bridge #(
 );
 
     
+    localparam TEMP_DURATION = (CLK_PERIOD/CLK_I2C_PERIOD);
+
+    logic [$clog2(TEMP_DURATION)-1:0] temp_duration_cnt = '{default:0};
+    logic [$clog2(TEMP_DURATION)-1:0] temp_duration_cnt_shifted = '{default:0};
+
+    always_ff @(posedge clk) begin 
+        if (temp_duration_cnt < TEMP_DURATION-1) 
+            temp_duration_cnt <= temp_duration_cnt + 1;
+        else 
+            temp_duration_cnt <= '{default:0};
+    end 
+
+    logic allow_counting = 1'b0;
+
+    always_ff @(posedge clk) begin 
+        if (temp_duration_cnt == (TEMP_DURATION-1)/4)
+            allow_counting <= 1'b1;
+    end 
+
+    always_ff @(posedge clk) begin 
+        if (allow_counting) 
+            if (temp_duration_cnt_shifted < TEMP_DURATION-1) begin 
+                temp_duration_cnt_shifted <= temp_duration_cnt_shifted + 1;
+            end else begin 
+                temp_duration_cnt_shifted <= '{default:0};
+            end 
+    end 
+
 
     /*Limit for counter for I2C CLK counter*/
     localparam DURATION = (CLK_PERIOD/CLK_I2C_PERIOD/2);

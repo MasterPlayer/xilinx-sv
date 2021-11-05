@@ -12,7 +12,7 @@ architecture tb_axis_iic_bridge_arch of tb_axis_iic_bridge is
 
     constant N_BYTES        :           integer     := 4                                    ;
     constant CLK_PERIOD     :           integer     := 100000000                            ;
-    constant CLK_I2C_PERIOD :           integer     := 25000000                             ;
+    constant CLK_I2C_PERIOD :           integer     := 14000000                             ;
 
 
     component axis_iic_bridge 
