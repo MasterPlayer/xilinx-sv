@@ -32,26 +32,33 @@ module axis_iic_bridge #(
     localparam DURATION_DIV4 = ((DURATION)/4)             ;
     localparam DATA_WIDTH    = (N_BYTES*8)                ;
 
-    logic [$clog2(DURATION)-1:0] duration_cnt          = '{default:0};
-    logic [$clog2(DURATION)-1:0] duration_cnt_shifted  = '{default:0};
-    logic                        has_event             = 1'b0        ;
-    logic                        allow_counting        = 1'b0        ;
-    logic                        clk_assert            = 1'b0        ;
-    logic                        clk_deassert          = 1'b0        ;
-    logic [                 7:0] i2c_address           = '{default:0};
-    logic [                 2:0] bit_cnt               = '{default:0};
-    logic                        has_ack               = 1'b0        ;
-    logic                        scl                   = 1'b1        ;
-    logic                        sda                   = 1'b1        ;
+    logic [$clog2(DURATION)-1:0] duration_cnt         = '{default:0};
+    logic [$clog2(DURATION)-1:0] duration_cnt_shifted = '{default:0};
+    logic                        has_event            = 1'b0        ;
+    logic                        allow_counting       = 1'b0        ;
+    logic                        clk_assert           = 1'b0        ;
+    logic                        clk_deassert         = 1'b0        ;
+    logic [                 2:0] bit_cnt              = '{default:0};
+    logic                        has_ack              = 1'b0        ;
+
+    logic scl = 1'b1;
+    logic sda = 1'b1;
+
+    logic [             7:0] i2c_address       = '{default:0};
+    logic [(DATA_WIDTH-1):0] transmission_size = '{default:0};
+
+
 
     logic                        bad_transmission_flaq = 1'b0        ;
 
-    logic [(DATA_WIDTH-1):0] in_dout_data       ;
-    logic [   (N_BYTES-1):0] in_dout_keep       ;
-    logic [             7:0] in_dout_user       ;
-    logic                    in_dout_last       ;
-    logic                    in_rden      = 1'b0;
-    logic                    in_empty           ;
+    logic [(DATA_WIDTH-1):0] in_dout_data                  ;
+    logic [(DATA_WIDTH-1):0] in_dout_data_shift            ;
+    logic [(DATA_WIDTH-1):0] in_dout_data_shift_swap       ;
+    logic [   (N_BYTES-1):0] in_dout_keep                  ;
+    logic [             7:0] in_dout_user                  ;
+    logic                    in_dout_last                  ;
+    logic                    in_rden                 = 1'b0;
+    logic                    in_empty                      ;
 
     typedef enum {
         IDLE_ST,
@@ -59,12 +66,25 @@ module axis_iic_bridge #(
         TX_ADDR_ST,
         WAIT_ACK_ST,
         WRITE_ST,
+        WAIT_WRITE_ACK_ST,
         READ_ST,
         STOP_ST,
         STUB_ST
     } fsm;
 
     fsm current_state = IDLE_ST;
+
+    
+    for (genvar index = 0; index < N_BYTES; index++) begin : adc_data_trans
+        // high = (((n_bytes)-index)*8)-1;
+        // low = (((n_bytes-1)-index)*8);
+        // high_ = ((index+1)*8)-1;
+        // low_ = (index*8);
+        always_comb begin
+            in_dout_data_shift_swap[((N_BYTES-index)*8)-1:(((N_BYTES-1)-index)*8)] = in_dout_data_shift[(((index+1)*8)-1):(index*8)];
+        end
+
+    end 
 
     always_ff @(posedge clk) begin 
         case (current_state)
@@ -148,6 +168,17 @@ module axis_iic_bridge #(
                 else if (duration_cnt_shifted == DURATION_DIV2) 
                     scl <= 1'b0;
 
+            WRITE_ST : 
+                if (duration_cnt_shifted == (DURATION-1))
+                    scl <= 1'b1;
+                else if (duration_cnt_shifted == DURATION_DIV2) 
+                    scl <= 1'b0;
+
+            WAIT_WRITE_ACK_ST : 
+                if (duration_cnt_shifted == (DURATION-1))
+                    scl <= 1'b1;
+                else if (duration_cnt_shifted == DURATION_DIV2) 
+                    scl <= 1'b0;
 
             STOP_ST : 
                 if (clk_assert)
@@ -163,10 +194,15 @@ module axis_iic_bridge #(
         if (has_event) begin 
             case (current_state)
                 IDLE_ST : 
-                    if (!in_empty) 
-                        sda <= 1'b0;
-                    else 
+                    if (!in_empty) begin 
+                        if (in_dout_data) begin 
+                            sda <= 1'b0;
+                        end else begin 
+                            sda <= 1'b1;
+                        end 
+                    end else begin  
                         sda <= 1'b1;
+                    end 
 
                 START_ST : 
                     sda <= i2c_address[7];
@@ -183,8 +219,14 @@ module axis_iic_bridge #(
                         // if read operation
                         sda <= 1'b1;
                     end else begin 
-
+                        sda <= in_dout_data_shift_swap[(DATA_WIDTH-1)];
                     end 
+
+                WRITE_ST :
+                    if (bit_cnt) 
+                        sda <= in_dout_data_shift_swap[(DATA_WIDTH-1)]; //TO DO : Here is data
+                    else
+                        sda <= 1'b1;
 
                 default : 
                     sda <= 1'b1;
@@ -202,7 +244,8 @@ module axis_iic_bridge #(
                 case (current_state)
                     IDLE_ST : 
                         if (!in_empty) 
-                            current_state <= START_ST;
+                            if (in_dout_data) 
+                                current_state <= START_ST;
 
                     START_ST : 
                         current_state <= TX_ADDR_ST;
@@ -221,7 +264,12 @@ module axis_iic_bridge #(
                         end 
 
                     WRITE_ST : 
-                        current_state <= STUB_ST;
+                        if (!bit_cnt) 
+                            current_state <= WAIT_WRITE_ACK_ST;
+
+                    WAIT_WRITE_ACK_ST : 
+                        if (has_ack)
+                            current_state <= STUB_ST;
                     
                     READ_ST : 
                         current_state <= STUB_ST;
@@ -262,6 +310,9 @@ module axis_iic_bridge #(
                 TX_ADDR_ST : 
                     bit_cnt <= bit_cnt - 1;
 
+                WRITE_ST : 
+                    bit_cnt <= bit_cnt - 1;
+
                 default : 
                     bit_cnt <= 7;
             endcase // current_state
@@ -278,6 +329,16 @@ module axis_iic_bridge #(
                         has_ack <= 1'b0;
                     end 
                 end 
+
+            WAIT_WRITE_ACK_ST : 
+                if (clk_assert) begin 
+                    if (!sda_i) begin 
+                        has_ack <= 1'b1;
+                    end else begin   
+                        has_ack <= 1'b0;
+                    end 
+                end 
+
 
             default: 
                 has_ack <= 1'b0;
@@ -307,14 +368,54 @@ module axis_iic_bridge #(
         .IN_EMPTY     (in_empty     )
     );
 
-    // /*Read Enable signal for input fifo*/
-    // always_ff @(posedge clk) begin : in_rden_processing
-    //     case (current_state) 
-    //         STUB_ST : in_rden <= 1'b1;
-    //         default : in_rden <= 1'b0;
-    //     endcase
-    // end 
+    always_ff @(posedge clk) begin 
+        if (has_event) begin 
+            case (current_state)
+                TX_ADDR_ST : 
+                    if (!bit_cnt) 
+                        in_dout_data_shift <= in_dout_data;
+                
+                WAIT_ACK_ST : 
+                    in_dout_data_shift <= {1'b0, in_dout_data_shift[DATA_WIDTH-1:1]};
 
+                WRITE_ST : 
+                    in_dout_data_shift <= {1'b0, in_dout_data_shift[DATA_WIDTH-1:1]};
+
+                default: 
+                    in_dout_data_shift <= in_dout_data_shift;
+            endcase // current_state
+        end 
+    end 
+
+    /*Read Enable signal for input fifo*/
+    always_ff @(posedge clk) begin : in_rden_processing
+        if (has_event) begin  
+            case (current_state) 
+                IDLE_ST : 
+                    if (!in_empty)
+                        in_rden <= 1'b1;
+                    else 
+                        in_rden <= 1'b0;
+
+                default : in_rden <= 1'b0;
+            endcase
+        end else begin 
+            in_rden <= 1'b0;
+        end 
+    end 
+
+    always_ff @(posedge clk) begin
+        if (has_event) begin 
+            case (current_state) 
+                IDLE_ST: 
+                    if (!in_empty)  
+                        transmission_size <= in_dout_data;
+
+                default: 
+                    transmission_size <= transmission_size;
+            endcase // current_state
+        end 
+    end 
 
 
 

@@ -635,7 +635,7 @@ begin
     begin
         if CLK'event AND CLK = '1' then 
             case i is
-                when 100 => S_AXIS_TDATA <= x"03020100"; S_AXIS_TUSER <= x"A6"; S_AXIS_TKEEP <= x"F"; S_AXIS_TVALID <= '1'; S_AXIS_TLAST <= '0';
+                when 100 => S_AXIS_TDATA <= x"00000004"; S_AXIS_TUSER <= x"A6"; S_AXIS_TKEEP <= x"F"; S_AXIS_TVALID <= '1'; S_AXIS_TLAST <= '0';
                 when 101 => S_AXIS_TDATA <= x"03020100"; S_AXIS_TUSER <= x"A6"; S_AXIS_TKEEP <= x"F"; S_AXIS_TVALID <= '1'; S_AXIS_TLAST <= '0';                
                 when others => S_AXIS_TDATA <= S_AXIS_TDATA; S_AXIS_TUSER <= S_AXIS_TUSER; S_AXIS_TKEEP <= S_AXIS_TKEEP; S_AXIS_TVALID <= '0'; S_AXIS_TLAST <= S_AXIS_TLAST;
             end case;
