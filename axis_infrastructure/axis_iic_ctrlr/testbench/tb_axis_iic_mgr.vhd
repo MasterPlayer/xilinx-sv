@@ -92,6 +92,18 @@ begin
     resetn <= '0' when i < 800 else '1';
 
 
+    s_axis_processing : process(CLK)
+    begin
+        if CLK'event AND CLK = '1' then 
+            case i is
+                when 1000 => S_AXIS_TDATA <= x"00000004"; s_axis_tdest <= x"A6"; S_AXIS_TKEEP <= x"F"; S_AXIS_TVALID <= '1'; S_AXIS_TLAST <= '0';
+                when 1001 => S_AXIS_TDATA <= x"55555555"; s_axis_tdest <= x"A6"; S_AXIS_TKEEP <= x"F"; S_AXIS_TVALID <= '1'; S_AXIS_TLAST <= '1';                
+                when others => S_AXIS_TDATA <= S_AXIS_TDATA; s_axis_tdest <= s_axis_tdest; S_AXIS_TKEEP <= S_AXIS_TKEEP; S_AXIS_TVALID <= '0'; S_AXIS_TLAST <= S_AXIS_TLAST;
+            end case;
+        end if;
+    end process;
+
+
     axis_iic_ctrlr_inst : axis_iic_ctrlr 
         generic map (
             CLK_PERIOD      =>  100000000       ,
