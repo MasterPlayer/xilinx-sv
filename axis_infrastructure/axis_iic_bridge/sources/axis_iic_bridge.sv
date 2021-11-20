@@ -610,13 +610,17 @@ module axis_iic_bridge #(
                         if (!in_empty)
                             transmission_size[((N_BYTES-index)*8)-1:(((N_BYTES-1)-index)*8)] <= in_dout_data[(((index+1)*8)-1):(index*8)];
 
-                    WRITE_ST: 
-                        if (!bit_cnt) 
-                            transmission_size <= transmission_size - 1;
+                    WAIT_ACK_ST : 
+                        transmission_size <= transmission_size - 1;
 
-                    READ_ST : 
-                        if (!bit_cnt)
-                            transmission_size <= transmission_size - 1;
+                    // WRITE_ST:
+                    WAIT_WRITE_ACK_ST:  
+                        // if (!bit_cnt) 
+                        transmission_size <= transmission_size - 1;
+
+                    WAIT_READ_ACK_ST : 
+                        // if (!bit_cnt)
+                        transmission_size <= transmission_size - 1;
 
                     default: 
                         transmission_size <= transmission_size;
@@ -627,7 +631,7 @@ module axis_iic_bridge #(
     end 
 
     always_ff @(posedge clk) begin 
-        if (transmission_size == 1)
+        if (transmission_size == 0)
             has_nack_required <= 1'b1;
         else 
             has_nack_required <= 1'b0; 
